@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,16 +32,106 @@ export default function Settings() {
   });
   const { toast } = useToast();
 
+  // Appearance helpers
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    const savedDensity = localStorage.getItem('density') || 'comfortable';
+    const savedTimezone = localStorage.getItem('timezone') || timezone;
+    const savedDateFormat = localStorage.getItem('dateFormat') || preferences.dateFormat;
+
+    setTheme(savedTheme);
+    setDensity(savedDensity);
+    setTimezone(savedTimezone);
+    setPreferences((prev) => ({ ...prev, dateFormat: savedDateFormat }));
+
+    applyTheme(savedTheme);
+    applyDensity(savedDensity);
+  }, []);
+
+  const applyTheme = (newTheme: string) => {
+    const root = document.documentElement;
+    root.classList.remove('dark');
+    if (newTheme === 'dark') root.classList.add('dark');
+    if (newTheme === 'system') {
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (isDark) root.classList.add('dark');
+    }
+  };
+
+  const applyDensity = (newDensity: string) => {
+    const root = document.documentElement;
+    root.classList.remove('density-compact', 'density-comfortable', 'density-spacious');
+    if (newDensity !== 'comfortable') root.classList.add(`density-${newDensity}`);
+  };
+
+  const handleThemeChange = (newTheme: string) => {
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    applyTheme(newTheme);
+  };
+
+  const handleDensityChange = (newDensity: string) => {
+    setDensity(newDensity);
+    localStorage.setItem('density', newDensity);
+    applyDensity(newDensity);
+  };
+
+  const saveProfile = async () => {
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const { error } = await supabase.from('profiles').upsert({
+          user_id: user.id,
+          full_name: preferences.name,
+          email: preferences.email,
+        });
+        if (error) throw error;
+      }
+
+      // Persist locally regardless of auth
+      localStorage.setItem('profile:name', preferences.name);
+      localStorage.setItem('profile:email', preferences.email);
+      localStorage.setItem('profile:jobTitle', preferences.jobTitle);
+      localStorage.setItem('profile:company', preferences.company);
+      localStorage.setItem('profile:bio', preferences.bio);
+
+      toast({ title: 'Preferências salvas', description: 'Suas informações foram atualizadas.' });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro ao salvar', description: 'Tente novamente.', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveWorkPreferences = async () => {
+    setIsSaving(true);
+    try {
+      localStorage.setItem('timezone', timezone);
+      localStorage.setItem('dateFormat', preferences.dateFormat);
+      toast({ title: 'Preferências de trabalho salvas', description: 'Configurações aplicadas com sucesso.' });
+    } catch (e) {
+      console.error(e);
+      toast({ title: 'Erro ao salvar', description: 'Tente novamente.', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const resetAllData = async () => {
     setIsResetting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        toast({ title: "Erro", description: "Usuário não encontrado", variant: "destructive" });
+        // No auth: reset only local data to allow "começar do zero"
+        ['theme','density','timezone','dateFormat','profile:name','profile:email','profile:jobTitle','profile:company','profile:bio'].forEach(k => localStorage.removeItem(k));
+        toast({ title: 'Dados locais resetados', description: 'Preferências locais foram limpas. Para apagar dados do banco, faça login.' });
         return;
       }
 
-      // Reset all user data in the correct order (respecting foreign key constraints)
+      // Reset all user data in the correct order (children -> parents)
       const tables = [
         'metrics',
         'tasks',
@@ -61,23 +151,13 @@ export default function Settings() {
           .from(table as any)
           .delete()
           .eq('user_id', user.id);
-        
-        if (error) {
-          console.error(`Error deleting from ${table}:`, error);
-        }
+        if (error) console.error(`Error deleting from ${table}:`, error);
       }
 
-      toast({ 
-        title: "Dados resetados com sucesso!", 
-        description: "Todos os seus dados foram removidos. Você pode começar do zero." 
-      });
+      toast({ title: 'Dados resetados com sucesso!', description: 'Todos os seus dados foram removidos.' });
     } catch (error) {
       console.error('Error resetting data:', error);
-      toast({ 
-        title: "Erro ao resetar dados", 
-        description: "Ocorreu um erro ao resetar os dados. Tente novamente.", 
-        variant: "destructive" 
-      });
+      toast({ title: 'Erro ao resetar dados', description: 'Tente novamente.', variant: 'destructive' });
     } finally {
       setIsResetting(false);
     }
@@ -126,30 +206,48 @@ export default function Settings() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Nome Completo</label>
-                  <Input placeholder="Seu nome completo" defaultValue="João Silva" />
+                  <Input 
+                    placeholder="Seu nome completo" 
+                    value={preferences.name}
+                    onChange={(e) => setPreferences({ ...preferences, name: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Email</label>
-                  <Input type="email" placeholder="seu@email.com" defaultValue="joao@exemplo.com" />
+                  <Input 
+                    type="email" 
+                    placeholder="seu@email.com" 
+                    value={preferences.email}
+                    onChange={(e) => setPreferences({ ...preferences, email: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Cargo</label>
-                  <Input placeholder="Seu cargo atual" defaultValue="Gestor de Marketing" />
+                  <Input 
+                    placeholder="Seu cargo atual" 
+                    value={preferences.jobTitle}
+                    onChange={(e) => setPreferences({ ...preferences, jobTitle: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Empresa</label>
-                  <Input placeholder="Nome da empresa" defaultValue="Minha Empresa Lda" />
+                  <Input 
+                    placeholder="Nome da empresa" 
+                    value={preferences.company}
+                    onChange={(e) => setPreferences({ ...preferences, company: e.target.value })}
+                  />
                 </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Bio</label>
                 <Textarea 
                   placeholder="Conte-nos um pouco sobre você..." 
-                  defaultValue="Profissional de marketing com 5 anos de experiência em marketing digital e gestão de campanhas."
+                  value={preferences.bio}
+                  onChange={(e) => setPreferences({ ...preferences, bio: e.target.value })}
                 />
               </div>
-              <Button className="w-full md:w-auto">
-                Salvar Alterações
+              <Button className="w-full md:w-auto" onClick={saveProfile} disabled={isSaving}>
+                {isSaving ? 'Salvando...' : 'Salvar Alterações'}
               </Button>
             </CardContent>
           </Card>
@@ -160,21 +258,37 @@ export default function Settings() {
               <CardDescription>Configure suas preferências de fluxo de trabalho</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Fuso Horário</label>
-                <select className="w-full p-2 border rounded-md">
-                  <option>Europe/Lisbon (GMT+0)</option>
-                  <option>Europe/Madrid (GMT+1)</option>
-                  <option>America/Sao_Paulo (GMT-3)</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Formato de Data</label>
-                <select className="w-full p-2 border rounded-md">
-                  <option>DD/MM/AAAA</option>
-                  <option>MM/DD/AAAA</option>
-                  <option>AAAA-MM-DD</option>
-                </select>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Fuso Horário</label>
+                  <select 
+                    className="w-full p-2 border rounded-md"
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                  >
+                    <option value="UTC">UTC (GMT+0)</option>
+                    <option value="Europe/Lisbon">Europe/Lisbon (GMT+0)</option>
+                    <option value="Europe/Madrid">Europe/Madrid (GMT+1)</option>
+                    <option value="America/Sao_Paulo">America/Sao_Paulo (GMT-3)</option>
+                    <option value="America/Cuiaba">America/Cuiaba (GMT-4)</option>
+                    <option value="America/New_York">America/New_York (GMT-5)</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Formato de Data</label>
+                  <select 
+                    className="w-full p-2 border rounded-md"
+                    value={preferences.dateFormat}
+                    onChange={(e) => setPreferences({ ...preferences, dateFormat: e.target.value })}
+                  >
+                    <option value="DD/MM/YYYY">DD/MM/AAAA</option>
+                    <option value="MM/DD/YYYY">MM/DD/AAAA</option>
+                    <option value="YYYY-MM-DD">AAAA-MM-DD</option>
+                  </select>
+                </div>
+                <Button className="w-full md:w-auto" onClick={saveWorkPreferences} disabled={isSaving}>
+                  {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -193,28 +307,48 @@ export default function Settings() {
                     <h4 className="text-sm font-medium">Notificações por Email</h4>
                     <p className="text-sm text-muted-foreground">Receba atualizações importantes por email</p>
                   </div>
-                  <input type="checkbox" className="toggle" defaultChecked />
+                  <input 
+                    type="checkbox" 
+                    className="toggle"
+                    checked={notifications.emailNotifications}
+                    onChange={(e) => setNotifications({ ...notifications, emailNotifications: e.target.checked })}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium">Relatórios Semanais</h4>
                     <p className="text-sm text-muted-foreground">Resumo semanal das suas métricas</p>
                   </div>
-                  <input type="checkbox" className="toggle" defaultChecked />
+                  <input 
+                    type="checkbox" 
+                    className="toggle"
+                    checked={notifications.weeklyReports}
+                    onChange={(e) => setNotifications({ ...notifications, weeklyReports: e.target.checked })}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium">Alertas de Orçamento</h4>
                     <p className="text-sm text-muted-foreground">Aviso quando atingir limites de orçamento</p>
                   </div>
-                  <input type="checkbox" className="toggle" defaultChecked />
+                  <input 
+                    type="checkbox" 
+                    className="toggle"
+                    checked={notifications.budgetAlerts}
+                    onChange={(e) => setNotifications({ ...notifications, budgetAlerts: e.target.checked })}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium">Lembretes de Tarefas</h4>
                     <p className="text-sm text-muted-foreground">Notificações sobre prazos e entregas</p>
                   </div>
-                  <input type="checkbox" className="toggle" />
+                  <input 
+                    type="checkbox" 
+                    className="toggle"
+                    checked={notifications.taskReminders}
+                    onChange={(e) => setNotifications({ ...notifications, taskReminders: e.target.checked })}
+                  />
                 </div>
               </div>
             </CardContent>
@@ -264,15 +398,24 @@ export default function Settings() {
                 <div>
                   <h4 className="text-sm font-medium mb-2">Tema</h4>
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="border-2 border-primary rounded-lg p-3 text-center cursor-pointer">
+                    <div 
+                      className={`border rounded-lg p-3 text-center cursor-pointer ${theme === 'light' ? 'border-primary' : 'border-border'}`}
+                      onClick={() => handleThemeChange('light')}
+                    >
                       <div className="w-full h-12 bg-background border rounded mb-2"></div>
                       <p className="text-xs">Claro</p>
                     </div>
-                    <div className="border rounded-lg p-3 text-center cursor-pointer">
+                    <div 
+                      className={`border rounded-lg p-3 text-center cursor-pointer ${theme === 'dark' ? 'border-primary' : 'border-border'}`}
+                      onClick={() => handleThemeChange('dark')}
+                    >
                       <div className="w-full h-12 bg-gray-900 rounded mb-2"></div>
                       <p className="text-xs">Escuro</p>
                     </div>
-                    <div className="border rounded-lg p-3 text-center cursor-pointer">
+                    <div 
+                      className={`border rounded-lg p-3 text-center cursor-pointer ${theme === 'system' ? 'border-primary' : 'border-border'}`}
+                      onClick={() => handleThemeChange('system')}
+                    >
                       <div className="w-full h-12 bg-gradient-to-br from-background to-gray-900 rounded mb-2"></div>
                       <p className="text-xs">Sistema</p>
                     </div>
@@ -280,10 +423,14 @@ export default function Settings() {
                 </div>
                 <div>
                   <h4 className="text-sm font-medium mb-2">Densidade da Interface</h4>
-                  <select className="w-full p-2 border rounded-md">
-                    <option>Confortável</option>
-                    <option>Compacto</option>
-                    <option>Espaçoso</option>
+                  <select 
+                    className="w-full p-2 border rounded-md"
+                    value={density}
+                    onChange={(e) => handleDensityChange(e.target.value)}
+                  >
+                    <option value="comfortable">Confortável</option>
+                    <option value="compact">Compacto</option>
+                    <option value="spacious">Espaçoso</option>
                   </select>
                 </div>
               </div>
