@@ -239,7 +239,7 @@ export function CampaignModal({ isOpen, onClose, onSuccess }: CampaignModalProps
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="budget">Orçamento (€)</Label>
+                <Label htmlFor="budget">Orçamento (R$)</Label>
                 <Input
                   id="budget"
                   type="number"

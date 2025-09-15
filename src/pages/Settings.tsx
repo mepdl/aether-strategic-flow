@@ -85,7 +85,6 @@ export default function Settings() {
         const { error } = await supabase.from('profiles').upsert({
           user_id: user.id,
           full_name: preferences.name,
-          email: preferences.email,
         });
         if (error) throw error;
       }
