@@ -34,19 +34,30 @@ interface SwotAnalysis {
   threats: string;
 }
 
+interface BrandIdentity {
+  id: string;
+  mission: string;
+  vision: string;
+  positioning: string;
+  values: string;
+}
+
 export default function Strategy() {
   const [objectives, setObjectives] = useState<Objective[]>([]);
   const [keyResults, setKeyResults] = useState<KeyResult[]>([]);
   const [swotAnalysis, setSwotAnalysis] = useState<SwotAnalysis | null>(null);
+  const [brandIdentity, setBrandIdentity] = useState<BrandIdentity | null>(null);
   const [newObjective, setNewObjective] = useState({ title: "", description: "", quarter: "Q1" });
   const [newKeyResult, setNewKeyResult] = useState({ objective_id: "", title: "", target_value: 0, unit: "" });
   const [newSwot, setNewSwot] = useState({ strengths: "", weaknesses: "", opportunities: "", threats: "" });
+  const [newBrand, setNewBrand] = useState({ mission: "", vision: "", positioning: "", values: "" });
   const { toast } = useToast();
 
   useEffect(() => {
     fetchObjectives();
     fetchKeyResults();
     fetchSwotAnalysis();
+    fetchBrandIdentity();
   }, []);
 
   const fetchObjectives = async () => {
@@ -85,6 +96,19 @@ export default function Strategy() {
     if (data) {
       setSwotAnalysis(data);
       setNewSwot(data);
+    }
+  };
+
+  const fetchBrandIdentity = async () => {
+    const { data, error } = await supabase
+      .from('brand_identity')
+      .select('*')
+      .limit(1)
+      .single();
+    
+    if (data) {
+      setBrandIdentity(data);
+      setNewBrand(data);
     }
   };
 
@@ -139,6 +163,22 @@ export default function Strategy() {
     } else {
       toast({ title: "Análise SWOT salva com sucesso!" });
       fetchSwotAnalysis();
+    }
+  };
+
+  const saveBrandIdentity = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = brandIdentity
+      ? await supabase.from('brand_identity').update(newBrand).eq('id', brandIdentity.id)
+      : await supabase.from('brand_identity').insert([{ ...newBrand, user_id: user.id }]);
+
+    if (error) {
+      toast({ title: "Erro ao salvar identidade da marca", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Identidade da marca salva com sucesso!" });
+      fetchBrandIdentity();
     }
   };
 
@@ -357,8 +397,51 @@ export default function Strategy() {
           <Card>
             <CardHeader>
               <CardTitle>Identidade da Marca</CardTitle>
-              <CardDescription>Em breve: Definição de missão, visão e posicionamento</CardDescription>
+              <CardDescription>Defina a missão, visão, posicionamento e valores da sua marca</CardDescription>
             </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Missão</label>
+                  <Textarea
+                    placeholder="Defina a missão da sua empresa - o propósito fundamental..."
+                    value={newBrand.mission}
+                    onChange={(e) => setNewBrand({ ...newBrand, mission: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Visão</label>
+                  <Textarea
+                    placeholder="Defina a visão da sua empresa - aonde vocês querem chegar..."
+                    value={newBrand.vision}
+                    onChange={(e) => setNewBrand({ ...newBrand, vision: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Posicionamento</label>
+                  <Textarea
+                    placeholder="Defina como sua marca se posiciona no mercado..."
+                    value={newBrand.positioning}
+                    onChange={(e) => setNewBrand({ ...newBrand, positioning: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Valores</label>
+                  <Textarea
+                    placeholder="Liste os valores fundamentais da sua empresa..."
+                    value={newBrand.values}
+                    onChange={(e) => setNewBrand({ ...newBrand, values: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <Button onClick={saveBrandIdentity} className="w-full">
+                Salvar Identidade da Marca
+              </Button>
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>

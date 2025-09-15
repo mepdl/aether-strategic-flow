@@ -3,9 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MetricCard } from "@/components/ui/metric-card";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, TrendingDown, Eye, Users, MousePointer, DollarSign, Target, Mail, Share2, Search } from "lucide-react";
+import { TrendingUp, TrendingDown, Eye, Users, MousePointer, DollarSign, Target, Mail, Share2, Search, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface Metric {
   id: string;
@@ -24,16 +28,7 @@ interface Campaign {
   status: string;
 }
 
-// Mock data for demonstration
-const trafficData = [
-  { month: "Jan", visitors: 4000, conversions: 240, revenue: 2400 },
-  { month: "Fev", visitors: 3000, conversions: 139, revenue: 2210 },
-  { month: "Mar", visitors: 2000, conversions: 980, revenue: 2290 },
-  { month: "Abr", visitors: 2780, conversions: 390, revenue: 2000 },
-  { month: "Mai", visitors: 1890, conversions: 480, revenue: 2181 },
-  { month: "Jun", visitors: 2390, conversions: 380, revenue: 2500 }
-];
-
+// Default channel data for visualization
 const channelData = [
   { name: "Orgânico", value: 45, color: "#8884d8" },
   { name: "PPC", value: 30, color: "#82ca9d" },
@@ -41,23 +36,23 @@ const channelData = [
   { name: "Email", value: 10, color: "#ff7300" }
 ];
 
-const campaignPerformance = [
-  { name: "Campanha Q1", impressions: 15000, clicks: 1200, conversions: 85, spend: 3500 },
-  { name: "Lançamento Produto", impressions: 8000, clicks: 950, conversions: 120, spend: 2800 },
-  { name: "Black Friday", impressions: 25000, clicks: 2100, conversions: 340, spend: 5200 },
-  { name: "Natal 2024", impressions: 12000, clicks: 890, conversions: 67, spend: 2100 }
-];
-
 export default function Analytics() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
   const [dateRange, setDateRange] = useState("30d");
+  const [startDate, setStartDate] = useState<Date>();
+  const [endDate, setEndDate] = useState<Date>();
+  const [filteredMetrics, setFilteredMetrics] = useState<Metric[]>([]);
 
   useEffect(() => {
     fetchMetrics();
     fetchCampaigns();
   }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [metrics, selectedCampaign, dateRange, startDate, endDate]);
 
   const fetchMetrics = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -81,6 +76,32 @@ export default function Analytics() {
     if (data) setCampaigns(data);
   };
 
+  const applyFilters = () => {
+    let filtered = [...metrics];
+
+    // Filtrar por campanha
+    if (selectedCampaign !== "all") {
+      filtered = filtered.filter(m => m.campaign_id === selectedCampaign);
+    }
+
+    // Filtrar por data
+    if (startDate || endDate) {
+      filtered = filtered.filter(m => {
+        const metricDate = new Date(m.date_recorded);
+        if (startDate && metricDate < startDate) return false;
+        if (endDate && metricDate > endDate) return false;
+        return true;
+      });
+    } else if (dateRange !== "all") {
+      const days = parseInt(dateRange.replace('d', ''));
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      filtered = filtered.filter(m => new Date(m.date_recorded) >= cutoffDate);
+    }
+
+    setFilteredMetrics(filtered);
+  };
+
   const getTotalBudget = () => {
     return campaigns.reduce((sum, campaign) => sum + Number(campaign.budget || 0), 0);
   };
@@ -95,13 +116,33 @@ export default function Analytics() {
     return total > 0 ? Math.round((spent / total) * 100) : 0;
   };
 
-  // Derived metrics from DB rows (fallback to 0, no dados fictícios)
-  const sumBy = (names: string[]) => metrics.filter(m => names.includes(m.metric_name)).reduce((s, m) => s + Number(m.metric_value || 0), 0);
+  // Usar métricas filtradas
+  const sumBy = (names: string[]) => filteredMetrics.filter(m => names.includes(m.metric_name)).reduce((s, m) => s + Number(m.metric_value || 0), 0);
   const totalVisitors = sumBy(['traffic', 'visitors', 'unique_visitors']);
   const totalConversions = sumBy(['conversions']);
   const totalRevenue = sumBy(['revenue']);
   const conversionRate = totalVisitors > 0 ? Number(((totalConversions / totalVisitors) * 100).toFixed(1)) : 0;
   const roas = getTotalSpent() > 0 ? Number((totalRevenue / getTotalSpent()).toFixed(1)) : 0;
+
+  // Gerar dados de gráfico baseados nos dados reais
+  const generateChartData = () => {
+    const monthlyData = filteredMetrics.reduce((acc: any, metric) => {
+      const month = format(new Date(metric.date_recorded), 'MMM');
+      if (!acc[month]) acc[month] = { month, visitors: 0, conversions: 0, revenue: 0 };
+      
+      if (['traffic', 'visitors', 'unique_visitors'].includes(metric.metric_name)) {
+        acc[month].visitors += Number(metric.metric_value || 0);
+      } else if (metric.metric_name === 'conversions') {
+        acc[month].conversions += Number(metric.metric_value || 0);
+      } else if (metric.metric_name === 'revenue') {
+        acc[month].revenue += Number(metric.metric_value || 0);
+      }
+      
+      return acc;
+    }, {});
+    
+    return Object.values(monthlyData);
+  };
 
   return (
     <div className="p-6 space-y-8">
@@ -131,6 +172,28 @@ export default function Analytics() {
             <option value="90d">Últimos 90 dias</option>
             <option value="1y">Último ano</option>
           </select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("justify-start text-left font-normal", !startDate && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {startDate ? format(startDate, "dd/MM/yyyy") : "Data início"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus className="pointer-events-auto" />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("justify-start text-left font-normal", !endDate && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {endDate ? format(endDate, "dd/MM/yyyy") : "Data fim"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus className="pointer-events-auto" />
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -138,7 +201,7 @@ export default function Analytics() {
         <MetricCard
           title="Visitantes"
           value={totalVisitors.toLocaleString('pt-BR')}
-          change={totalVisitors > 0 ? undefined : undefined}
+          change={undefined}
           trend={undefined}
           icon={<Users className="h-4 w-4" />}
         />
@@ -183,7 +246,7 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={trafficData}>
+                  <LineChart data={generateChartData()}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
@@ -260,20 +323,34 @@ export default function Analytics() {
           <Card>
             <CardHeader>
               <CardTitle>Performance das Campanhas</CardTitle>
-              <CardDescription>Métricas detalhadas por campanha</CardDescription>
+              <CardDescription>Métricas detalhadas por campanha ativas</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={campaignPerformance}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="impressions" fill="#8884d8" />
-                  <Bar dataKey="clicks" fill="#82ca9d" />
-                  <Bar dataKey="conversions" fill="#ffc658" />
-                </BarChart>
-              </ResponsiveContainer>
+              {campaigns.length === 0 ? (
+                <div className="h-64 flex items-center justify-center text-muted-foreground">
+                  <p>Nenhuma campanha criada ainda</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {campaigns.map(campaign => {
+                    const campaignMetrics = filteredMetrics.filter(m => m.campaign_id === campaign.id);
+                    const impressions = campaignMetrics.filter(m => m.metric_name === 'impressions').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                    const clicks = campaignMetrics.filter(m => m.metric_name === 'clicks').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                    const conversions = campaignMetrics.filter(m => m.metric_name === 'conversions').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                    
+                    return (
+                      <div key={campaign.id} className="p-4 border rounded-lg">
+                        <h4 className="font-semibold">{campaign.name}</h4>
+                        <div className="grid grid-cols-3 gap-4 mt-2">
+                          <div><span className="text-muted-foreground">Impressões:</span> {impressions}</div>
+                          <div><span className="text-muted-foreground">Cliques:</span> {clicks}</div>
+                          <div><span className="text-muted-foreground">Conversões:</span> {conversions}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -300,34 +377,47 @@ export default function Analytics() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-4 md:grid-cols-4">
-                    <div className="flex items-center gap-2">
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Impressões</p>
-                        <p className="font-semibold">12,450</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MousePointer className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Cliques</p>
-                        <p className="font-semibold">1,234</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Target className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Conversões</p>
-                        <p className="font-semibold">89</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">ROAS</p>
-                        <p className="font-semibold">3.2x</p>
-                      </div>
-                    </div>
+                    {(() => {
+                      const campaignMetrics = filteredMetrics.filter(m => m.campaign_id === campaign.id);
+                      const impressions = campaignMetrics.filter(m => m.metric_name === 'impressions').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      const clicks = campaignMetrics.filter(m => m.metric_name === 'clicks').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      const conversions = campaignMetrics.filter(m => m.metric_name === 'conversions').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      const revenue = campaignMetrics.filter(m => m.metric_name === 'revenue').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      const roas = campaign.spent && campaign.spent > 0 ? (revenue / campaign.spent).toFixed(1) : '0.0';
+                      
+                      return (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">Impressões</p>
+                              <p className="font-semibold">{impressions.toLocaleString('pt-BR')}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <MousePointer className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">Cliques</p>
+                              <p className="font-semibold">{clicks.toLocaleString('pt-BR')}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Target className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">Conversões</p>
+                              <p className="font-semibold">{conversions.toLocaleString('pt-BR')}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">ROAS</p>
+                              <p className="font-semibold">{roas}x</p>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </CardContent>
               </Card>
@@ -348,13 +438,11 @@ export default function Analytics() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Tráfego Orgânico</p>
-                    <p className="text-2xl font-bold">11,234</p>
-                    <p className="text-sm text-green-600">+8.2%</p>
+                    <p className="text-2xl font-bold">{filteredMetrics.filter(m => m.metric_name === 'organic_traffic').reduce((s, m) => s + Number(m.metric_value || 0), 0).toLocaleString('pt-BR')}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Palavras-chave</p>
-                    <p className="text-2xl font-bold">156</p>
-                    <p className="text-sm text-green-600">+12</p>
+                    <p className="text-2xl font-bold">{filteredMetrics.filter(m => m.metric_name === 'keywords').reduce((s, m) => s + Number(m.metric_value || 0), 0)}</p>
                   </div>
                 </div>
               </CardContent>
@@ -371,13 +459,19 @@ export default function Analytics() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">CTR Médio</p>
-                    <p className="text-2xl font-bold">2.8%</p>
-                    <p className="text-sm text-green-600">+0.3%</p>
+                    <p className="text-2xl font-bold">{(() => {
+                      const clicks = filteredMetrics.filter(m => m.metric_name === 'clicks').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      const impressions = filteredMetrics.filter(m => m.metric_name === 'impressions').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      return impressions > 0 ? ((clicks / impressions) * 100).toFixed(1) : '0.0';
+                    })()}%</p>
                   </div>
                   <div>
-                      <p className="text-sm text-muted-foreground">CPC Médio</p>
-                      <p className="text-2xl font-bold">R$ 1,24</p>
-                      <p className="text-sm text-red-600">+R$ 0,12</p>
+                    <p className="text-sm text-muted-foreground">CPC Médio</p>
+                    <p className="text-2xl font-bold">R$ {(() => {
+                      const spent = getTotalSpent();
+                      const clicks = filteredMetrics.filter(m => m.metric_name === 'clicks').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      return clicks > 0 ? (spent / clicks).toFixed(2) : '0.00';
+                    })()}</p>
                   </div>
                 </div>
               </CardContent>
@@ -394,13 +488,11 @@ export default function Analytics() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Engajamento</p>
-                    <p className="text-2xl font-bold">4.2%</p>
-                    <p className="text-sm text-green-600">+0.8%</p>
+                    <p className="text-2xl font-bold">{filteredMetrics.filter(m => m.metric_name === 'engagement').reduce((s, m) => s + Number(m.metric_value || 0), 0).toLocaleString('pt-BR')}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Alcance</p>
-                    <p className="text-2xl font-bold">15.6k</p>
-                    <p className="text-sm text-green-600">+2.1k</p>
+                    <p className="text-2xl font-bold">{(filteredMetrics.filter(m => m.metric_name === 'reach').reduce((s, m) => s + Number(m.metric_value || 0), 0) / 1000).toFixed(1)}k</p>
                   </div>
                 </div>
               </CardContent>
@@ -417,13 +509,19 @@ export default function Analytics() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Taxa de Abertura</p>
-                    <p className="text-2xl font-bold">28.4%</p>
-                    <p className="text-sm text-green-600">+3.2%</p>
+                    <p className="text-2xl font-bold">{(() => {
+                      const opens = filteredMetrics.filter(m => m.metric_name === 'email_opens').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      const sent = filteredMetrics.filter(m => m.metric_name === 'email_sent').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      return sent > 0 ? ((opens / sent) * 100).toFixed(1) : '0.0';
+                    })()}%</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Taxa de Clique</p>
-                    <p className="text-2xl font-bold">3.8%</p>
-                    <p className="text-sm text-red-600">-0.4%</p>
+                    <p className="text-2xl font-bold">{(() => {
+                      const emailClicks = filteredMetrics.filter(m => m.metric_name === 'email_clicks').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      const sent = filteredMetrics.filter(m => m.metric_name === 'email_sent').reduce((s, m) => s + Number(m.metric_value || 0), 0);
+                      return sent > 0 ? ((emailClicks / sent) * 100).toFixed(1) : '0.0';
+                    })()}%</p>
                   </div>
                 </div>
               </CardContent>
@@ -435,8 +533,24 @@ export default function Analytics() {
           <Card>
             <CardHeader>
               <CardTitle>Métricas de SEO</CardTitle>
-              <CardDescription>Em breve: Dashboard completo de SEO com rankings, backlinks e análise técnica</CardDescription>
+              <CardDescription>Dashboard completo de SEO com base nos dados reais</CardDescription>
             </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">Tráfego Orgânico</p>
+                  <p className="text-2xl font-bold">{filteredMetrics.filter(m => m.metric_name === 'organic_traffic').reduce((s, m) => s + Number(m.metric_value || 0), 0).toLocaleString('pt-BR')}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Palavras-chave Rankeadas</p>
+                  <p className="text-2xl font-bold">{filteredMetrics.filter(m => m.metric_name === 'keywords').reduce((s, m) => s + Number(m.metric_value || 0), 0)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Backlinks</p>
+                  <p className="text-2xl font-bold">{filteredMetrics.filter(m => m.metric_name === 'backlinks').reduce((s, m) => s + Number(m.metric_value || 0), 0)}</p>
+                </div>
+              </div>
+            </CardContent>
           </Card>
         </TabsContent>
 
@@ -444,8 +558,24 @@ export default function Analytics() {
           <Card>
             <CardHeader>
               <CardTitle>Analytics Social Media</CardTitle>
-              <CardDescription>Em breve: Métricas detalhadas das redes sociais com engajamento e crescimento</CardDescription>
+              <CardDescription>Métricas detalhadas das redes sociais</CardDescription>
             </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">Engajamento Total</p>
+                  <p className="text-2xl font-bold">{filteredMetrics.filter(m => m.metric_name === 'engagement').reduce((s, m) => s + Number(m.metric_value || 0), 0).toLocaleString('pt-BR')}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Alcance</p>
+                  <p className="text-2xl font-bold">{(filteredMetrics.filter(m => m.metric_name === 'reach').reduce((s, m) => s + Number(m.metric_value || 0), 0) / 1000).toFixed(1)}k</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Seguidores</p>
+                  <p className="text-2xl font-bold">{filteredMetrics.filter(m => m.metric_name === 'followers').reduce((s, m) => s + Number(m.metric_value || 0), 0).toLocaleString('pt-BR')}</p>
+                </div>
+              </div>
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>

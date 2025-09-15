@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { 
   Zap,
   Plus,
@@ -16,7 +18,9 @@ import {
   Play,
   Pause,
   Settings,
-  BarChart3
+  BarChart3,
+  Trash2,
+  Edit
 } from "lucide-react";
 import { CampaignModal } from "@/components/CampaignModal";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,6 +70,8 @@ export default function Campaigns() {
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState<any[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const { toast } = useToast();
 
   const fetchCampaigns = async () => {
@@ -85,6 +91,14 @@ export default function Campaigns() {
 
       if (error) throw error;
       setCampaigns(campaignsData || []);
+      
+      // Buscar métricas reais
+      const { data: metricsData } = await supabase
+        .from('metrics')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      setMetrics(metricsData || []);
     } catch (error) {
       console.error('Error fetching campaigns:', error);
       toast({
@@ -126,6 +140,42 @@ export default function Campaigns() {
         variant: "destructive"
       });
     }
+  };
+
+  const handleDeleteCampaign = async (campaignId: string) => {
+    try {
+      const { error } = await supabase
+        .from('campaigns')
+        .delete()
+        .eq('id', campaignId);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Campanha excluída",
+        description: "Campanha removida com sucesso"
+      });
+      
+      fetchCampaigns();
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir campanha",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Calcular métricas reais
+  const getTotalConversions = () => {
+    return metrics.filter(m => m.metric_name === 'conversions').reduce((sum, m) => sum + Number(m.metric_value || 0), 0);
+  };
+
+  const getAverageROI = () => {
+    const totalSpent = campaigns.reduce((sum, c) => sum + Number(c.spent || 0), 0);
+    const totalRevenue = metrics.filter(m => m.metric_name === 'revenue').reduce((sum, m) => sum + Number(m.metric_value || 0), 0);
+    return totalSpent > 0 ? Math.round(((totalRevenue - totalSpent) / totalSpent) * 100) : 0;
   };
 
   useEffect(() => {
@@ -189,7 +239,7 @@ export default function Campaigns() {
                   <TrendingUp className="w-5 h-5 text-success" />
                   <div>
                     <p className="text-sm text-muted-foreground">ROI Médio</p>
-                    <p className="text-2xl font-bold">165%</p>
+                    <p className="text-2xl font-bold">{getAverageROI()}%</p>
                   </div>
                 </div>
               </CardContent>
@@ -200,7 +250,7 @@ export default function Campaigns() {
                   <Target className="w-5 h-5 text-accent" />
                   <div>
                     <p className="text-sm text-muted-foreground">Conversões</p>
-                    <p className="text-2xl font-bold">698</p>
+                    <p className="text-2xl font-bold">{getTotalConversions()}</p>
                   </div>
                 </div>
               </CardContent>
@@ -246,13 +296,49 @@ export default function Campaigns() {
                         >
                           <BarChart3 className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => toast({ title: "Em breve", description: "Configurações serão implementadas" })}
-                        >
-                          <Settings className="w-4 h-4" />
-                        </Button>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={() => setSelectedCampaign(campaign)}>
+                              <Settings className="w-4 h-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Configurações da Campanha</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <p className="text-muted-foreground">Campanha: {selectedCampaign?.name}</p>
+                              <div className="flex gap-2">
+                                <Button variant="outline" className="flex-1">
+                                  <Edit className="w-4 h-4 mr-2" />
+                                  Editar Campanha
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" className="flex-1">
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Excluir
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Excluir campanha?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Esta ação não pode ser desfeita. Isso excluirá permanentemente a campanha.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => selectedCampaign && handleDeleteCampaign(selectedCampaign.id)}>
+                                        Excluir
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                         <Button 
                           variant="ghost" 
                           size="icon"
