@@ -16,12 +16,15 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import type { Database } from "@/integrations/supabase/types";
+
+type TaskStatus = Database['public']['Enums']['task_status'];
 
 interface Task {
   id: string;
   title: string;
   description: string;
-  status: string;
+  status: TaskStatus;
   priority: number;
   due_date: string;
   campaign_id?: string;
@@ -60,13 +63,20 @@ export default function Projects() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [newTask, setNewTask] = useState({
+  const [newTask, setNewTask] = useState<{
+    title: string;
+    description: string;
+    priority: number;
+    due_date: string;
+    campaign_id: string;
+    status: TaskStatus;
+  }>({
     title: "",
     description: "",
     priority: 3,
     due_date: "",
     campaign_id: "",
-    status: "ideas"
+    status: "ideas" as TaskStatus
   });
   const { toast } = useToast();
 
@@ -121,7 +131,7 @@ export default function Projects() {
         priority: 3,
         due_date: "",
         campaign_id: "",
-        status: "ideas"
+        status: "ideas" as TaskStatus
       });
       fetchTasks();
     }
