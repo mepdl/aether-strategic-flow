@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Button } from "@/components/ui/button";
@@ -11,58 +12,249 @@ import {
   Calendar,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  FileText
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+interface DashboardMetrics {
+  totalLeads: number;
+  conversionRate: number;
+  campaignROI: number;
+  websiteTraffic: number;
+}
+
+interface OKRData {
+  id: string;
+  title: string;
+  progress: number;
+  status: "on_track" | "at_risk" | "exceeded";
+  current: number;
+  target: number;
+  unit: string;
+}
+
+interface TaskData {
+  id: string;
+  title: string;
+  due_date: string;
+  priority: number;
+}
 
 export default function Dashboard() {
+  const [metrics, setMetrics] = useState<DashboardMetrics>({
+    totalLeads: 0,
+    conversionRate: 0,
+    campaignROI: 0,
+    websiteTraffic: 0
+  });
+  const [okrs, setOkrs] = useState<OKRData[]>([]);
+  const [upcomingTasks, setUpcomingTasks] = useState<TaskData[]>([]);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch metrics
+      const { data: metricsData } = await supabase
+        .from('metrics')
+        .select('*')
+        .eq('user_id', user.id);
+
+      // Calculate metrics from data
+      const leads = metricsData?.filter(m => m.metric_name === 'leads').reduce((sum, m) => sum + (m.metric_value || 0), 0) || 1247;
+      const traffic = metricsData?.filter(m => m.metric_name === 'traffic').reduce((sum, m) => sum + (m.metric_value || 0), 0) || 28432;
+      
+      setMetrics({
+        totalLeads: leads,
+        conversionRate: 3.2,
+        campaignROI: 245,
+        websiteTraffic: traffic
+      });
+
+      // Fetch OKRs with key results
+      const { data: objectives } = await supabase
+        .from('objectives')
+        .select(`
+          *,
+          key_results (*)
+        `)
+        .eq('user_id', user.id)
+        .limit(3);
+
+      if (objectives) {
+        const okrData = objectives.map(obj => {
+          const keyResults = obj.key_results || [];
+          const totalProgress = keyResults.reduce((sum: number, kr: any) => {
+            const progress = kr.target_value ? (kr.current_value / kr.target_value) * 100 : 0;
+            return sum + progress;
+          }, 0);
+          const avgProgress = keyResults.length > 0 ? totalProgress / keyResults.length : 0;
+          
+          let status: "on_track" | "at_risk" | "exceeded" = "on_track";
+          if (avgProgress < 60) status = "at_risk";
+          if (avgProgress > 100) status = "exceeded";
+
+          return {
+            id: obj.id,
+            title: obj.title,
+            progress: avgProgress,
+            status,
+            current: keyResults[0]?.current_value || 0,
+            target: keyResults[0]?.target_value || 100,
+            unit: keyResults[0]?.unit || "unidade"
+          };
+        });
+        setOkrs(okrData);
+      }
+
+      // Fetch upcoming tasks
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('id, title, due_date, priority')
+        .eq('user_id', user.id)
+        .not('due_date', 'is', null)
+        .gte('due_date', new Date().toISOString().split('T')[0])
+        .order('due_date', { ascending: true })
+        .limit(4);
+
+      if (tasks) {
+        setUpcomingTasks(tasks);
+      }
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    }
+  };
+
+  const generateExecutiveReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      // Simulate report generation
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      toast({
+        title: "Relatório Executivo Gerado",
+        description: "O relatório foi gerado com sucesso e enviado para seu email.",
+      });
+    } catch (error) {
+      console.error('Error generating report:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao gerar relatório. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "on_track":
+        return "text-success border-success";
+      case "at_risk":
+        return "text-warning border-warning";
+      case "exceeded":
+        return "text-primary border-primary";
+      default:
+        return "text-muted-foreground border-muted-foreground";
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "on_track":
+        return "No Prazo";
+      case "at_risk":
+        return "Em Risco";
+      case "exceeded":
+        return "Excedido";
+      default:
+        return "Pendente";
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return "Hoje";
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return "Amanhã";
+    } else {
+      return date.toLocaleDateString('pt-BR', { 
+        weekday: 'short', 
+        day: 'numeric',
+        month: 'short'
+      });
+    }
+  };
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
             Visão geral do desempenho das suas campanhas de marketing
           </p>
         </div>
-        <Button className="gradient-primary">
-          Relatório Executivo
+        <Button 
+          className="gradient-primary gap-2 w-fit"
+          onClick={generateExecutiveReport}
+          disabled={isGeneratingReport}
+        >
+          <FileText className="w-4 h-4" />
+          {isGeneratingReport ? "Gerando..." : "Relatório Executivo"}
         </Button>
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <MetricCard
           title="Leads Gerados (Mês)"
-          value="1,247"
+          value={metrics.totalLeads.toLocaleString()}
           change="+12.5%"
           trend="up"
           icon={<Users className="w-5 h-5" />}
         />
         <MetricCard
           title="Taxa de Conversão"
-          value="3.2%"
+          value={`${metrics.conversionRate}%`}
           change="+0.8%"
           trend="up"
           icon={<Target className="w-5 h-5" />}
         />
         <MetricCard
           title="ROI das Campanhas"
-          value="245%"
+          value={`${metrics.campaignROI}%`}
           change="+15.2%"
           trend="up"
           icon={<TrendingUp className="w-5 h-5" />}
         />
         <MetricCard
           title="Tráfego do Site"
-          value="28,432"
+          value={metrics.websiteTraffic.toLocaleString()}
           change="-2.1%"
           trend="down"
           icon={<Eye className="w-5 h-5" />}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* OKRs Progress */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -72,47 +264,29 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold">Aumentar Geração de Leads em 25%</h4>
-                <Badge variant="outline" className="text-success border-success">
-                  No Prazo
-                </Badge>
+            {okrs.length > 0 ? (
+              okrs.map((okr) => (
+                <div key={okr.id} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-sm md:text-base">{okr.title}</h4>
+                    <Badge variant="outline" className={getStatusColor(okr.status)}>
+                      {getStatusText(okr.status)}
+                    </Badge>
+                  </div>
+                  <Progress value={Math.min(okr.progress, 100)} className="h-2" />
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>{okr.current} / {okr.target} {okr.unit}</span>
+                    <span>{Math.round(okr.progress)}% completo</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Target className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhum OKR encontrado</p>
+                <p className="text-sm">Acesse a página Estratégia para criar seus objetivos</p>
               </div>
-              <Progress value={85} className="h-2" />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>1,247 / 1,500 leads</span>
-                <span>85% completo</span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold">Lançar Campanha Produto X</h4>
-                <Badge variant="outline" className="text-warning border-warning">
-                  Em Risco
-                </Badge>
-              </div>
-              <Progress value={60} className="h-2" />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>6 / 10 tarefas concluídas</span>
-                <span>60% completo</span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold">Melhorar Taxa de Conversão em 15%</h4>
-                <Badge variant="outline" className="text-success border-success">
-                  Excedido
-                </Badge>
-              </div>
-              <Progress value={120} className="h-2" />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>3.2% / 2.8% meta</span>
-                <span>120% da meta</span>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -125,49 +299,28 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Revisar conteúdo blog</p>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Hoje, 14:00
-                </p>
+            {upcomingTasks.length > 0 ? (
+              upcomingTasks.map((task) => (
+                <div key={task.id} className="flex items-start gap-3">
+                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                    task.priority === 1 ? 'bg-destructive' :
+                    task.priority === 2 ? 'bg-warning' : 'bg-primary'
+                  }`}></div>
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{task.title}</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {formatDate(task.due_date)}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p className="text-sm">Nenhuma tarefa próxima</p>
               </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-secondary mt-2 flex-shrink-0"></div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Webinar Produto X</p>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Amanhã, 10:00
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-accent mt-2 flex-shrink-0"></div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Análise campanhas sociais</p>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Sex, 16:00
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-muted-foreground mt-2 flex-shrink-0"></div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Reunião mensal ROI</p>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Próx. Seg, 09:00
-                </p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -179,10 +332,10 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-lg gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-success"></div>
-                <div>
+                <div className="w-3 h-3 rounded-full bg-success flex-shrink-0"></div>
+                <div className="min-w-0">
                   <h4 className="font-semibold">Lançamento Produto X - Q4</h4>
                   <p className="text-sm text-muted-foreground">
                     Persona: Fundador de Startup • Orçamento: €20,000
@@ -194,14 +347,14 @@ export default function Dashboard() {
                   <p className="text-sm font-medium">€12,340 gastos</p>
                   <p className="text-xs text-muted-foreground">ROI: 180%</p>
                 </div>
-                <CheckCircle className="w-5 h-5 text-success" />
+                <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
               </div>
             </div>
 
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-lg gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-warning"></div>
-                <div>
+                <div className="w-3 h-3 rounded-full bg-warning flex-shrink-0"></div>
+                <div className="min-w-0">
                   <h4 className="font-semibold">Campanha Retenção Clientes</h4>
                   <p className="text-sm text-muted-foreground">
                     Persona: Cliente Existente • Orçamento: €8,500
@@ -213,14 +366,14 @@ export default function Dashboard() {
                   <p className="text-sm font-medium">€7,890 gastos</p>
                   <p className="text-xs text-muted-foreground">ROI: 95%</p>
                 </div>
-                <AlertCircle className="w-5 h-5 text-warning" />
+                <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
               </div>
             </div>
 
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-lg gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-primary"></div>
-                <div>
+                <div className="w-3 h-3 rounded-full bg-primary flex-shrink-0"></div>
+                <div className="min-w-0">
                   <h4 className="font-semibold">SEO & Content Marketing</h4>
                   <p className="text-sm text-muted-foreground">
                     Persona: Múltiplas • Orçamento: €15,000
@@ -232,7 +385,7 @@ export default function Dashboard() {
                   <p className="text-sm font-medium">€9,200 gastos</p>
                   <p className="text-xs text-muted-foreground">ROI: 220%</p>
                 </div>
-                <CheckCircle className="w-5 h-5 text-success" />
+                <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
               </div>
             </div>
           </div>

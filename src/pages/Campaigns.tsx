@@ -18,6 +18,7 @@ import {
   Settings,
   BarChart3
 } from "lucide-react";
+import { CampaignModal } from "@/components/CampaignModal";
 
 const mockCampaigns = [
   {
@@ -104,6 +105,12 @@ const getStatusText = (status: string) => {
 
 export default function Campaigns() {
   const [activeTab, setActiveTab] = useState("overview");
+  const [showCampaignModal, setShowCampaignModal] = useState(false);
+
+  const handleCampaignCreated = () => {
+    // Refresh campaigns list
+    window.location.reload();
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -115,7 +122,10 @@ export default function Campaigns() {
             Gerencie e monitore suas campanhas de marketing integradas
           </p>
         </div>
-        <Button className="gap-2 gradient-primary">
+        <Button 
+          className="gap-2 gradient-primary"
+          onClick={() => setShowCampaignModal(true)}
+        >
           <Plus className="w-4 h-4" />
           Nova Campanha
         </Button>
@@ -306,6 +316,12 @@ export default function Campaigns() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <CampaignModal 
+        isOpen={showCampaignModal}
+        onClose={() => setShowCampaignModal(false)}
+        onSuccess={handleCampaignCreated}
+      />
     </div>
   );
 }

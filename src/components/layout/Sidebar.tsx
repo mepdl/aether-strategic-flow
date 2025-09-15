@@ -32,7 +32,7 @@ export function Sidebar() {
         <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
           <TrendingUp className="w-5 h-5 text-white" />
         </div>
-        <span className="text-xl font-bold text-gradient">Aether</span>
+        <span className="text-xl font-bold text-gradient">FlowMint</span>
       </div>
 
       {/* Navigation */}

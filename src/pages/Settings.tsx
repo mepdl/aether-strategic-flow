@@ -12,6 +12,24 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function Settings() {
   const [isResetting, setIsResetting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [theme, setTheme] = useState("system");
+  const [density, setDensity] = useState("comfortable");
+  const [timezone, setTimezone] = useState("America/Cuiaba");
+  const [preferences, setPreferences] = useState({
+    name: "",
+    email: "",
+    jobTitle: "",
+    company: "",
+    bio: "",
+    dateFormat: "DD/MM/YYYY"
+  });
+  const [notifications, setNotifications] = useState({
+    emailNotifications: true,
+    weeklyReports: false,
+    budgetAlerts: true,
+    taskReminders: true
+  });
   const { toast } = useToast();
 
   const resetAllData = async () => {
