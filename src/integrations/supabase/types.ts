@@ -14,7 +14,541 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      brand_identity: {
+        Row: {
+          brand_persona: string | null
+          created_at: string
+          id: string
+          marketing_mix: Json | null
+          mission: string | null
+          positioning: string | null
+          updated_at: string
+          user_id: string
+          values: string | null
+          vision: string | null
+        }
+        Insert: {
+          brand_persona?: string | null
+          created_at?: string
+          id?: string
+          marketing_mix?: Json | null
+          mission?: string | null
+          positioning?: string | null
+          updated_at?: string
+          user_id: string
+          values?: string | null
+          vision?: string | null
+        }
+        Update: {
+          brand_persona?: string | null
+          created_at?: string
+          id?: string
+          marketing_mix?: Json | null
+          mission?: string | null
+          positioning?: string | null
+          updated_at?: string
+          user_id?: string
+          values?: string | null
+          vision?: string | null
+        }
+        Relationships: []
+      }
+      campaign_personas: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          id: string
+          persona_id: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          id?: string
+          persona_id: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          id?: string
+          persona_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_personas_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_personas_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          budget: number | null
+          channels: Database["public"]["Enums"]["marketing_channel"][] | null
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          name: string
+          objective_id: string | null
+          spent: number | null
+          start_date: string | null
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          budget?: number | null
+          channels?: Database["public"]["Enums"]["marketing_channel"][] | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          objective_id?: string | null
+          spent?: number | null
+          start_date?: string | null
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          budget?: number | null
+          channels?: Database["public"]["Enums"]["marketing_channel"][] | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          objective_id?: string | null
+          spent?: number | null
+          start_date?: string | null
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      competitors: {
+        Row: {
+          created_at: string
+          id: string
+          marketing_strategies: string | null
+          name: string
+          notes: string | null
+          pricing: Json | null
+          products: Json | null
+          updated_at: string
+          user_id: string
+          website: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          marketing_strategies?: string | null
+          name: string
+          notes?: string | null
+          pricing?: Json | null
+          products?: Json | null
+          updated_at?: string
+          user_id: string
+          website?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          marketing_strategies?: string | null
+          name?: string
+          notes?: string | null
+          pricing?: Json | null
+          products?: Json | null
+          updated_at?: string
+          user_id?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      content: {
+        Row: {
+          author: string | null
+          campaign_id: string | null
+          content_body: string | null
+          created_at: string
+          delivery_date: string | null
+          format: Database["public"]["Enums"]["content_format"]
+          id: string
+          journey_stage:
+            | Database["public"]["Enums"]["customer_journey_stage"]
+            | null
+          persona_id: string | null
+          publish_date: string | null
+          status: Database["public"]["Enums"]["task_status"] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          author?: string | null
+          campaign_id?: string | null
+          content_body?: string | null
+          created_at?: string
+          delivery_date?: string | null
+          format: Database["public"]["Enums"]["content_format"]
+          id?: string
+          journey_stage?:
+            | Database["public"]["Enums"]["customer_journey_stage"]
+            | null
+          persona_id?: string | null
+          publish_date?: string | null
+          status?: Database["public"]["Enums"]["task_status"] | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          author?: string | null
+          campaign_id?: string | null
+          content_body?: string | null
+          created_at?: string
+          delivery_date?: string | null
+          format?: Database["public"]["Enums"]["content_format"]
+          id?: string
+          journey_stage?:
+            | Database["public"]["Enums"]["customer_journey_stage"]
+            | null
+          persona_id?: string | null
+          publish_date?: string | null
+          status?: Database["public"]["Enums"]["task_status"] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      key_results: {
+        Row: {
+          created_at: string
+          current_value: number | null
+          id: string
+          objective_id: string
+          target_value: number | null
+          title: string
+          unit: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_value?: number | null
+          id?: string
+          objective_id: string
+          target_value?: number | null
+          title: string
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_value?: number | null
+          id?: string
+          objective_id?: string
+          target_value?: number | null
+          title?: string
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "key_results_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metrics: {
+        Row: {
+          campaign_id: string | null
+          channel: Database["public"]["Enums"]["marketing_channel"] | null
+          created_at: string
+          date_recorded: string | null
+          id: string
+          metric_name: string
+          metric_value: number | null
+          user_id: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          channel?: Database["public"]["Enums"]["marketing_channel"] | null
+          created_at?: string
+          date_recorded?: string | null
+          id?: string
+          metric_name: string
+          metric_value?: number | null
+          user_id: string
+        }
+        Update: {
+          campaign_id?: string | null
+          channel?: Database["public"]["Enums"]["marketing_channel"] | null
+          created_at?: string
+          date_recorded?: string | null
+          id?: string
+          metric_name?: string
+          metric_value?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metrics_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      objectives: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          quarter: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          year: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          quarter?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+          year?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          quarter?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          year?: number | null
+        }
+        Relationships: []
+      }
+      personas: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          demographics: Json | null
+          goals: string | null
+          id: string
+          pain_points: string | null
+          persona_name: string
+          role: string | null
+          updated_at: string
+          user_id: string
+          watering_holes: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          demographics?: Json | null
+          goals?: string | null
+          id?: string
+          pain_points?: string | null
+          persona_name: string
+          role?: string | null
+          updated_at?: string
+          user_id: string
+          watering_holes?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          demographics?: Json | null
+          goals?: string | null
+          id?: string
+          pain_points?: string | null
+          persona_name?: string
+          role?: string | null
+          updated_at?: string
+          user_id?: string
+          watering_holes?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      swot_analysis: {
+        Row: {
+          created_at: string
+          id: string
+          opportunities: string | null
+          strengths: string | null
+          threats: string | null
+          updated_at: string
+          user_id: string
+          weaknesses: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          opportunities?: string | null
+          strengths?: string | null
+          threats?: string | null
+          updated_at?: string
+          user_id: string
+          weaknesses?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          opportunities?: string | null
+          strengths?: string | null
+          threats?: string | null
+          updated_at?: string
+          user_id?: string
+          weaknesses?: string | null
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          assigned_to: string | null
+          campaign_id: string | null
+          content_id: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          id: string
+          priority: number | null
+          status: Database["public"]["Enums"]["task_status"] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          campaign_id?: string | null
+          content_id?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: number | null
+          status?: Database["public"]["Enums"]["task_status"] | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          campaign_id?: string | null
+          content_id?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: number | null
+          status?: Database["public"]["Enums"]["task_status"] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "content"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +557,29 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "editor" | "analyst" | "viewer"
+      content_format:
+        | "blog_post"
+        | "social_media"
+        | "email"
+        | "video"
+        | "infographic"
+        | "webinar"
+        | "ebook"
+      customer_journey_stage:
+        | "awareness"
+        | "consideration"
+        | "decision"
+        | "retention"
+      marketing_channel:
+        | "seo"
+        | "ppc"
+        | "social_media"
+        | "email"
+        | "content"
+        | "pr"
+        | "events"
+      task_status: "ideas" | "in_progress" | "review" | "approved" | "published"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +706,33 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "editor", "analyst", "viewer"],
+      content_format: [
+        "blog_post",
+        "social_media",
+        "email",
+        "video",
+        "infographic",
+        "webinar",
+        "ebook",
+      ],
+      customer_journey_stage: [
+        "awareness",
+        "consideration",
+        "decision",
+        "retention",
+      ],
+      marketing_channel: [
+        "seo",
+        "ppc",
+        "social_media",
+        "email",
+        "content",
+        "pr",
+        "events",
+      ],
+      task_status: ["ideas", "in_progress", "review", "approved", "published"],
+    },
   },
 } as const
