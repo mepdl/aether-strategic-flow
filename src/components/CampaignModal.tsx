@@ -32,50 +32,24 @@ interface Objective {
 }
 
 const marketingChannels = [
-  'google_ads',
-  'facebook_ads',
-  'instagram_ads',
-  'linkedin_ads',
-  'email_marketing',
-  'content_marketing',
   'seo',
-  'social_media',
   'ppc',
-  'display_ads',
-  'influencer_marketing',
-  'video_marketing',
-  'podcast_advertising',
-  'affiliate_marketing',
-  'direct_mail',
-  'events',
-  'webinars',
+  'social_media',
+  'email',
+  'content',
   'pr',
-  'word_of_mouth',
-  'other'
-];
+  'events'
+] as const;
 
 const getChannelLabel = (channel: string) => {
   const labels: { [key: string]: string } = {
-    'google_ads': 'Google Ads',
-    'facebook_ads': 'Facebook Ads',
-    'instagram_ads': 'Instagram Ads',
-    'linkedin_ads': 'LinkedIn Ads',
-    'email_marketing': 'Email Marketing',
-    'content_marketing': 'Content Marketing',
-    'seo': 'SEO',
-    'social_media': 'Social Media',
-    'ppc': 'PPC',
-    'display_ads': 'Display Ads',
-    'influencer_marketing': 'Influencer Marketing',
-    'video_marketing': 'Video Marketing',
-    'podcast_advertising': 'Podcast Advertising',
-    'affiliate_marketing': 'Affiliate Marketing',
-    'direct_mail': 'Direct Mail',
-    'events': 'Eventos',
-    'webinars': 'Webinars',
-    'pr': 'PR',
-    'word_of_mouth': 'Boca a Boca',
-    'other': 'Outros'
+    seo: 'SEO',
+    ppc: 'PPC',
+    social_media: 'Mídias Sociais',
+    email: 'Email',
+    content: 'Conteúdo',
+    pr: 'Relações Públicas',
+    events: 'Eventos'
   };
   return labels[channel] || channel;
 };
