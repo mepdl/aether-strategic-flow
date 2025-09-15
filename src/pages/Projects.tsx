@@ -79,6 +79,9 @@ export default function Projects() {
     status: "ideas" as TaskStatus
   });
   const { toast } = useToast();
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editStatus, setEditStatus] = useState<TaskStatus>('ideas' as TaskStatus);
+  const [editNotes, setEditNotes] = useState<string>('');
 
   useEffect(() => {
     fetchTasks();
@@ -137,6 +140,21 @@ export default function Projects() {
     }
   };
 
+  const updateTask = async () => {
+    if (!editingTask) return;
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: editStatus, description: editNotes })
+      .eq('id', editingTask.id);
+    if (error) {
+      toast({ title: 'Erro ao atualizar tarefa', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Tarefa atualizada!' });
+      setEditingTask(null);
+      fetchTasks();
+    }
+  };
+
   const getTasksForStatus = (status: string) => {
     return tasks.filter(task => task.status === status);
   };
@@ -146,7 +164,7 @@ export default function Projects() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="p-6 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Projetos</h1>
@@ -237,6 +255,7 @@ export default function Projects() {
               {getTasksForStatus(column.id).map((task) => (
                 <Card 
                   key={task.id} 
+                  onClick={() => { setEditingTask(task); setEditStatus(task.status); setEditNotes(task.description || ''); }}
                   className={`cursor-pointer hover:shadow-md transition-all border-l-4 ${getPriorityColor(task.priority)}`}
                 >
                   <CardContent className="p-3">
@@ -332,6 +351,37 @@ export default function Projects() {
                 <Button variant="outline" onClick={() => setShowModal(false)}>
                   Cancelar
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {editingTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md m-4">
+            <CardHeader>
+              <CardTitle>Atualizar Tarefa</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input disabled value={editingTask.title} />
+              <select
+                className="w-full p-2 border rounded-md"
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value as TaskStatus)}
+              >
+                {statusColumns.map((s) => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
+              <Textarea
+                placeholder="Observação"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Button onClick={updateTask} className="flex-1">Salvar</Button>
+                <Button variant="outline" onClick={() => setEditingTask(null)}>Cancelar</Button>
               </div>
             </CardContent>
           </Card>

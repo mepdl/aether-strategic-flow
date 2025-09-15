@@ -60,20 +60,24 @@ export default function Analytics() {
   }, []);
 
   const fetchMetrics = async () => {
-    const { data, error } = await supabase
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setMetrics([]); return; }
+    const { data } = await supabase
       .from('metrics')
       .select('*')
+      .eq('user_id', user.id)
       .order('date_recorded', { ascending: false });
-    
     if (data) setMetrics(data);
   };
 
   const fetchCampaigns = async () => {
-    const { data, error } = await supabase
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setCampaigns([]); return; }
+    const { data } = await supabase
       .from('campaigns')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    
     if (data) setCampaigns(data);
   };
 
@@ -91,8 +95,16 @@ export default function Analytics() {
     return total > 0 ? Math.round((spent / total) * 100) : 0;
   };
 
+  // Derived metrics from DB rows (fallback to 0, no dados fictícios)
+  const sumBy = (names: string[]) => metrics.filter(m => names.includes(m.metric_name)).reduce((s, m) => s + Number(m.metric_value || 0), 0);
+  const totalVisitors = sumBy(['traffic', 'visitors', 'unique_visitors']);
+  const totalConversions = sumBy(['conversions']);
+  const totalRevenue = sumBy(['revenue']);
+  const conversionRate = totalVisitors > 0 ? Number(((totalConversions / totalVisitors) * 100).toFixed(1)) : 0;
+  const roas = getTotalSpent() > 0 ? Number((totalRevenue / getTotalSpent()).toFixed(1)) : 0;
+
   return (
-    <div className="space-y-8">
+    <div className="p-6 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
@@ -124,31 +136,31 @@ export default function Analytics() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          title="Visitantes Únicos"
-          value="24,580"
-          change="+12.5%"
-          trend="up"
+          title="Visitantes"
+          value={totalVisitors.toLocaleString('pt-BR')}
+          change={totalVisitors > 0 ? undefined : undefined}
+          trend={undefined}
           icon={<Users className="h-4 w-4" />}
         />
         <MetricCard
           title="Taxa de Conversão"
-          value="3.2%"
-          change="+0.8%"
-          trend="up"
+          value={`${conversionRate}%`}
+          change={undefined}
+          trend={undefined}
           icon={<Target className="h-4 w-4" />}
         />
         <MetricCard
           title="Receita Total"
-          value="€45,231"
-          change="-2.4%"
-          trend="down"
+          value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalRevenue || 0)}
+          change={undefined}
+          trend={undefined}
           icon={<DollarSign className="h-4 w-4" />}
         />
         <MetricCard
           title="ROAS Médio"
-          value="4.2x"
-          change="+15.3%"
-          trend="up"
+          value={`${roas}x`}
+          change={undefined}
+          trend={undefined}
           icon={<TrendingUp className="h-4 w-4" />}
         />
       </div>
@@ -221,11 +233,11 @@ export default function Analytics() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Orçamento Total</p>
-                  <p className="text-2xl font-bold">€{getTotalBudget().toLocaleString()}</p>
+                  <p className="text-2xl font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(getTotalBudget())}</p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Gasto Atual</p>
-                  <p className="text-2xl font-bold">€{getTotalSpent().toLocaleString()}</p>
+                  <p className="text-2xl font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(getTotalSpent())}</p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Utilização</p>
@@ -273,10 +285,10 @@ export default function Analytics() {
                     <CardTitle className="text-lg">{campaign.name}</CardTitle>
                     <div className="flex items-center gap-4 text-sm">
                       <span className="text-muted-foreground">
-                        Orçamento: €{Number(campaign.budget || 0).toLocaleString()}
+                        Orçamento: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(campaign.budget || 0))}
                       </span>
                       <span className="text-muted-foreground">
-                        Gasto: €{Number(campaign.spent || 0).toLocaleString()}
+                        Gasto: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(campaign.spent || 0))}
                       </span>
                       <span className={`px-2 py-1 rounded-full text-xs ${
                         campaign.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -363,9 +375,9 @@ export default function Analytics() {
                     <p className="text-sm text-green-600">+0.3%</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">CPC Médio</p>
-                    <p className="text-2xl font-bold">€1.24</p>
-                    <p className="text-sm text-red-600">+€0.12</p>
+                      <p className="text-sm text-muted-foreground">CPC Médio</p>
+                      <p className="text-2xl font-bold">R$ 1,24</p>
+                      <p className="text-sm text-red-600">+R$ 0,12</p>
                   </div>
                 </div>
               </CardContent>

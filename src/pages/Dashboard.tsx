@@ -51,6 +51,7 @@ export default function Dashboard() {
   });
   const [okrs, setOkrs] = useState<OKRData[]>([]);
   const [upcomingTasks, setUpcomingTasks] = useState<TaskData[]>([]);
+  const [campaigns, setCampaigns] = useState<{ id: string; name: string; budget: number | null; spent: number | null; status: string | null; }[]>([]);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const { toast } = useToast();
 
@@ -69,14 +70,16 @@ export default function Dashboard() {
         .select('*')
         .eq('user_id', user.id);
 
-      // Calculate metrics from data
-      const leads = metricsData?.filter(m => m.metric_name === 'leads').reduce((sum, m) => sum + (m.metric_value || 0), 0) || 1247;
-      const traffic = metricsData?.filter(m => m.metric_name === 'traffic').reduce((sum, m) => sum + (m.metric_value || 0), 0) || 28432;
-      
+      // Calculate metrics from data (fallback to 0, no fake numbers)
+      const leads = metricsData?.filter(m => m.metric_name === 'leads').reduce((sum, m: any) => sum + (m.metric_value || 0), 0) || 0;
+      const traffic = metricsData?.filter(m => m.metric_name === 'traffic').reduce((sum, m: any) => sum + (m.metric_value || 0), 0) || 0;
+      const conversions = metricsData?.filter(m => m.metric_name === 'conversions').reduce((sum, m: any) => sum + (m.metric_value || 0), 0) || 0;
+      const conversionRate = traffic > 0 ? Number(((conversions / traffic) * 100).toFixed(1)) : 0;
+
       setMetrics({
         totalLeads: leads,
-        conversionRate: 3.2,
-        campaignROI: 245,
+        conversionRate,
+        campaignROI: 0,
         websiteTraffic: traffic
       });
 
@@ -129,6 +132,15 @@ export default function Dashboard() {
       if (tasks) {
         setUpcomingTasks(tasks);
       }
+
+      // Fetch latest campaigns to display (no fake data)
+      const { data: campaignRows } = await supabase
+        .from('campaigns')
+        .select('id, name, budget, spent, status')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      if (campaignRows) setCampaigns(campaignRows);
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -331,64 +343,29 @@ export default function Dashboard() {
           <CardTitle>Campanhas Ativas</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-lg gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-success flex-shrink-0"></div>
-                <div className="min-w-0">
-                  <h4 className="font-semibold">Lançamento Produto X - Q4</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Persona: Fundador de Startup • Orçamento: €20,000
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="text-sm font-medium">€12,340 gastos</p>
-                  <p className="text-xs text-muted-foreground">ROI: 180%</p>
-                </div>
-                <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
-              </div>
+          {campaigns.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>Nenhuma campanha encontrada</p>
+              <p className="text-sm">Crie campanhas na página Campanhas</p>
             </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-lg gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-warning flex-shrink-0"></div>
-                <div className="min-w-0">
-                  <h4 className="font-semibold">Campanha Retenção Clientes</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Persona: Cliente Existente • Orçamento: €8,500
-                  </p>
+          ) : (
+            <div className="space-y-4">
+              {campaigns.map((c) => (
+                <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-lg gap-4">
+                  <div className="min-w-0">
+                    <h4 className="font-semibold truncate">{c.name}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Orçamento: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.budget || 0))}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">Gasto: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.spent || 0))}</p>
+                    <p className="text-xs text-muted-foreground">Status: {c.status === 'active' ? 'Ativa' : (c.status === 'paused' ? 'Pausada' : 'Rascunho')}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="text-sm font-medium">€7,890 gastos</p>
-                  <p className="text-xs text-muted-foreground">ROI: 95%</p>
-                </div>
-                <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
-              </div>
+              ))}
             </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-lg gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-primary flex-shrink-0"></div>
-                <div className="min-w-0">
-                  <h4 className="font-semibold">SEO & Content Marketing</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Persona: Múltiplas • Orçamento: €15,000
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="text-sm font-medium">€9,200 gastos</p>
-                  <p className="text-xs text-muted-foreground">ROI: 220%</p>
-                </div>
-                <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
-              </div>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

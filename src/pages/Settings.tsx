@@ -82,11 +82,26 @@ export default function Settings() {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
-        const { error } = await supabase.from('profiles').upsert({
-          user_id: user.id,
-          full_name: preferences.name,
-        });
-        if (error) throw error;
+        const fullName = (preferences.name || '').trim() || 'Usuário';
+        // Upsert without unique constraint on user_id can fail. Do a safe select->update/insert flow.
+        const { data: existing } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (existing?.id) {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ full_name: fullName })
+            .eq('id', existing.id);
+          if (updateError) throw updateError;
+        } else {
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert({ user_id: user.id, full_name: fullName });
+          if (insertError) throw insertError;
+        }
       }
 
       // Persist locally regardless of auth
