@@ -420,7 +420,6 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
-          email: string
           full_name: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
@@ -430,7 +429,6 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
-          email: string
           full_name: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
@@ -440,7 +438,6 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
-          email?: string
           full_name?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
@@ -554,7 +551,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_current_user_email: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "editor" | "analyst" | "viewer"
