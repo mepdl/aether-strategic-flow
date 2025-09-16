@@ -29,13 +29,15 @@ import { useToast } from "@/hooks/use-toast";
 interface Campaign {
   id: string;
   name: string;
+  description?: string;
   status: string;
   budget: number;
   spent: number;
   start_date: string;
   end_date: string;
+  objective_id?: string;
   channels: string[];
-  campaign_personas?: Array<{ personas: { persona_name: string } }>;
+  campaign_personas?: Array<{ personas: { persona_name: string }; persona_id: string }>;
   objectives?: { title: string };
 }
 
@@ -72,6 +74,7 @@ export default function Campaigns() {
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState<any[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const { toast } = useToast();
 
   const fetchCampaigns = async () => {
@@ -83,7 +86,7 @@ export default function Campaigns() {
         .from('campaigns')
         .select(`
           *,
-          campaign_personas(personas(persona_name)),
+          campaign_personas(persona_id, personas(persona_name)),
           objectives(title)
         `)
         .eq('user_id', user.id)
@@ -309,7 +312,14 @@ export default function Campaigns() {
                             <div className="space-y-4">
                               <p className="text-muted-foreground">Campanha: {selectedCampaign?.name}</p>
                               <div className="flex gap-2">
-                                <Button variant="outline" className="flex-1">
+                                <Button 
+                                  variant="outline" 
+                                  className="flex-1"
+                                  onClick={() => {
+                                    setEditingCampaign(selectedCampaign);
+                                    setShowCampaignModal(true);
+                                  }}
+                                >
                                   <Edit className="w-4 h-4 mr-2" />
                                   Editar Campanha
                                 </Button>
@@ -435,8 +445,12 @@ export default function Campaigns() {
 
       <CampaignModal 
         isOpen={showCampaignModal}
-        onClose={() => setShowCampaignModal(false)}
+        onClose={() => {
+          setShowCampaignModal(false);
+          setEditingCampaign(null);
+        }}
         onSuccess={handleCampaignCreated}
+        editingCampaign={editingCampaign}
       />
     </div>
   );

@@ -15,10 +15,25 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+interface Campaign {
+  id: string;
+  name: string;
+  description?: string;
+  budget: number;
+  spent: number;
+  start_date?: string;
+  end_date?: string;
+  objective_id?: string;
+  status: string;
+  channels: string[];
+  campaign_personas?: Array<{ persona_id: string }>;
+}
+
 interface CampaignModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  editingCampaign?: Campaign | null;
 }
 
 interface Persona {
@@ -54,7 +69,7 @@ const getChannelLabel = (channel: string) => {
   return labels[channel] || channel;
 };
 
-export function CampaignModal({ isOpen, onClose, onSuccess }: CampaignModalProps) {
+export function CampaignModal({ isOpen, onClose, onSuccess, editingCampaign }: CampaignModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -75,8 +90,37 @@ export function CampaignModal({ isOpen, onClose, onSuccess }: CampaignModalProps
   useEffect(() => {
     if (isOpen) {
       fetchData();
+      if (editingCampaign) {
+        // Pre-fill form with editing campaign data
+        setFormData({
+          name: editingCampaign.name,
+          description: editingCampaign.description || "",
+          budget: editingCampaign.budget.toString(),
+          spent: editingCampaign.spent.toString(),
+          startDate: editingCampaign.start_date ? new Date(editingCampaign.start_date) : undefined,
+          endDate: editingCampaign.end_date ? new Date(editingCampaign.end_date) : undefined,
+          objectiveId: editingCampaign.objective_id || "",
+          status: editingCampaign.status
+        });
+        setSelectedChannels(editingCampaign.channels || []);
+        setSelectedPersonas(editingCampaign.campaign_personas?.map(cp => cp.persona_id) || []);
+      } else {
+        // Reset form for new campaign
+        setFormData({
+          name: "",
+          description: "",
+          budget: "",
+          spent: "0",
+          startDate: undefined,
+          endDate: undefined,
+          objectiveId: "",
+          status: "active"
+        });
+        setSelectedChannels([]);
+        setSelectedPersonas([]);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, editingCampaign]);
 
   const fetchData = async () => {
     try {
@@ -135,45 +179,85 @@ export function CampaignModal({ isOpen, onClose, onSuccess }: CampaignModalProps
         return;
       }
 
-      // Create campaign
-      const { data: campaignData, error: campaignError } = await supabase
-        .from('campaigns')
-        .insert([{
-          name: formData.name,
-          description: formData.description,
-          budget: parseFloat(formData.budget) || 0,
-          spent: parseFloat(formData.spent) || 0,
-          start_date: formData.startDate?.toISOString().split('T')[0],
-          end_date: formData.endDate?.toISOString().split('T')[0],
-          objective_id: formData.objectiveId || null,
-          status: formData.status as any,
-          channels: selectedChannels as any,
-          user_id: user.id
-        }])
-        .select()
-        .single();
+      let campaignData;
+      let campaignError;
+
+      if (editingCampaign) {
+        // Update existing campaign
+        const { data, error } = await supabase
+          .from('campaigns')
+          .update({
+            name: formData.name,
+            description: formData.description,
+            budget: parseFloat(formData.budget) || 0,
+            spent: parseFloat(formData.spent) || 0,
+            start_date: formData.startDate?.toISOString().split('T')[0],
+            end_date: formData.endDate?.toISOString().split('T')[0],
+            objective_id: formData.objectiveId || null,
+            status: formData.status as any,
+            channels: selectedChannels as any
+          })
+          .eq('id', editingCampaign.id)
+          .select()
+          .single();
+        
+        campaignData = data;
+        campaignError = error;
+      } else {
+        // Create new campaign
+        const { data, error } = await supabase
+          .from('campaigns')
+          .insert([{
+            name: formData.name,
+            description: formData.description,
+            budget: parseFloat(formData.budget) || 0,
+            spent: parseFloat(formData.spent) || 0,
+            start_date: formData.startDate?.toISOString().split('T')[0],
+            end_date: formData.endDate?.toISOString().split('T')[0],
+            objective_id: formData.objectiveId || null,
+            status: formData.status as any,
+            channels: selectedChannels as any,
+            user_id: user.id
+          }])
+          .select()
+          .single();
+        
+        campaignData = data;
+        campaignError = error;
+      }
 
       if (campaignError) throw campaignError;
 
-      // Create campaign-persona relationships
-      if (selectedPersonas.length > 0 && campaignData) {
-        const campaignPersonaData = selectedPersonas.map(personaId => ({
-          campaign_id: campaignData.id,
-          persona_id: personaId
-        }));
+      // Update campaign-persona relationships
+      if (campaignData) {
+        if (editingCampaign) {
+          // Delete existing relationships
+          await supabase
+            .from('campaign_personas')
+            .delete()
+            .eq('campaign_id', editingCampaign.id);
+        }
 
-        const { error: personaError } = await supabase
-          .from('campaign_personas')
-          .insert(campaignPersonaData);
+        // Create new relationships
+        if (selectedPersonas.length > 0) {
+          const campaignPersonaData = selectedPersonas.map(personaId => ({
+            campaign_id: campaignData.id,
+            persona_id: personaId
+          }));
 
-        if (personaError) {
-          console.error('Error linking personas:', personaError);
+          const { error: personaError } = await supabase
+            .from('campaign_personas')
+            .insert(campaignPersonaData);
+
+          if (personaError) {
+            console.error('Error linking personas:', personaError);
+          }
         }
       }
 
       toast({
-        title: "Campanha criada",
-        description: "Campanha criada com sucesso!",
+        title: editingCampaign ? "Campanha atualizada" : "Campanha criada",
+        description: editingCampaign ? "Campanha atualizada com sucesso!" : "Campanha criada com sucesso!",
       });
 
       // Reset form
@@ -209,7 +293,7 @@ export function CampaignModal({ isOpen, onClose, onSuccess }: CampaignModalProps
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nova Campanha</DialogTitle>
+          <DialogTitle>{editingCampaign ? "Editar Campanha" : "Nova Campanha"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -394,7 +478,7 @@ export function CampaignModal({ isOpen, onClose, onSuccess }: CampaignModalProps
               disabled={!formData.name || isLoading}
               className="gradient-primary"
             >
-              {isLoading ? "Criando..." : "Criar Campanha"}
+              {isLoading ? (editingCampaign ? "Atualizando..." : "Criando...") : (editingCampaign ? "Atualizar Campanha" : "Criar Campanha")}
             </Button>
           </div>
         </form>
