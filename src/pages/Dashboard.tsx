@@ -4,12 +4,14 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   Users, 
   Target, 
   TrendingUp, 
   Eye,
-  Calendar,
+  Calendar as CalendarIcon,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -17,6 +19,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface DashboardMetrics {
   totalLeads: number;
@@ -53,6 +57,9 @@ export default function Dashboard() {
   const [upcomingTasks, setUpcomingTasks] = useState<TaskData[]>([]);
   const [campaigns, setCampaigns] = useState<{ id: string; name: string; budget: number | null; spent: number | null; status: string | null; }[]>([]);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [startDate, setStartDate] = useState<Date>();
+  const [endDate, setEndDate] = useState<Date>();
+  const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -150,12 +157,107 @@ export default function Dashboard() {
   const generateExecutiveReport = async () => {
     setIsGeneratingReport(true);
     try {
-      // Simulate report generation
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Generate HTML report
+      const reportHTML = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Relatório Executivo - Marketing</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background: #f9f9f9; }
+            .container { max-width: 800px; margin: 0 auto; background: white; padding: 40px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+            .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid #0066cc; padding-bottom: 20px; }
+            .header h1 { color: #0066cc; font-size: 2.5em; margin-bottom: 10px; }
+            .header p { color: #666; font-size: 1.1em; }
+            .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
+            .metric-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center; }
+            .metric-value { font-size: 2em; font-weight: bold; margin-bottom: 5px; }
+            .metric-label { font-size: 0.9em; opacity: 0.9; }
+            .section { margin-bottom: 40px; }
+            .section h2 { color: #0066cc; margin-bottom: 20px; font-size: 1.8em; }
+            .okr-item { background: #f8f9fa; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid #28a745; }
+            .progress-bar { background: #e9ecef; height: 10px; border-radius: 5px; margin-top: 10px; }
+            .progress-fill { background: linear-gradient(90deg, #28a745, #20c997); height: 100%; border-radius: 5px; transition: width 0.3s ease; }
+            @media (max-width: 768px) { 
+              .container { padding: 20px; }
+              .metrics-grid { grid-template-columns: 1fr; }
+              .header h1 { font-size: 2em; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Relatório Executivo</h1>
+              <p>Período: ${startDate ? format(startDate, 'dd/MM/yyyy') : 'Início'} - ${endDate ? format(endDate, 'dd/MM/yyyy') : 'Fim'}</p>
+              <p>Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+            </div>
+            
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <div class="metric-value">${metrics.totalLeads.toLocaleString()}</div>
+                <div class="metric-label">Leads Gerados</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value">${metrics.conversionRate}%</div>
+                <div class="metric-label">Taxa de Conversão</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value">${metrics.campaignROI}%</div>
+                <div class="metric-label">ROI das Campanhas</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value">${metrics.websiteTraffic.toLocaleString()}</div>
+                <div class="metric-label">Tráfego do Site</div>
+              </div>
+            </div>
+
+            <div class="section">
+              <h2>Progresso dos OKRs</h2>
+              ${okrs.map(okr => `
+                <div class="okr-item">
+                  <h3>${okr.title}</h3>
+                  <p>Status: ${getStatusText(okr.status)} | Progresso: ${Math.round(okr.progress)}%</p>
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${Math.min(okr.progress, 100)}%"></div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="section">
+              <h2>Campanhas Ativas</h2>
+              ${campaigns.map(c => `
+                <div class="okr-item">
+                  <h3>${c.name}</h3>
+                  <p>Orçamento: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.budget || 0))}</p>
+                  <p>Gasto: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.spent || 0))}</p>
+                  <p>Status: ${c.status === 'active' ? 'Ativa' : (c.status === 'paused' ? 'Pausada' : 'Rascunho')}</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Create and download the file
+      const blob = new Blob([reportHTML], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `relatorio-executivo-${format(new Date(), 'yyyy-MM-dd')}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       
       toast({
         title: "Relatório Executivo Gerado",
-        description: "O relatório foi gerado com sucesso e enviado para seu email.",
+        description: "O relatório foi baixado com sucesso.",
       });
     } catch (error) {
       console.error('Error generating report:', error);
@@ -232,6 +334,42 @@ export default function Dashboard() {
           <FileText className="w-4 h-4" />
           {isGeneratingReport ? "Gerando..." : "Relatório Executivo"}
         </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-4">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className={cn("justify-start text-left font-normal", !startDate && "text-muted-foreground")}>
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {startDate ? format(startDate, "dd/MM/yyyy") : "Data início"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0">
+            <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
+          </PopoverContent>
+        </Popover>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className={cn("justify-start text-left font-normal", !endDate && "text-muted-foreground")}>
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {endDate ? format(endDate, "dd/MM/yyyy") : "Data fim"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0">
+            <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
+          </PopoverContent>
+        </Popover>
+        <select 
+          className="px-3 py-2 border rounded-md"
+          value={selectedCampaign}
+          onChange={(e) => setSelectedCampaign(e.target.value)}
+        >
+          <option value="all">Todas as Campanhas</option>
+          {campaigns.map(campaign => (
+            <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Metrics Grid */}

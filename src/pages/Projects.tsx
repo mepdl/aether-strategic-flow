@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { TaskChat } from "@/components/TaskChat";
+import { useUserRole } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import type { Database } from "@/integrations/supabase/types";
 
 type TaskStatus = Database['public']['Enums']['task_status'];
@@ -28,6 +31,7 @@ interface Task {
   priority: number;
   due_date: string;
   campaign_id?: string;
+  user_id?: string;
 }
 
 interface Campaign {
@@ -82,6 +86,8 @@ export default function Projects() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editStatus, setEditStatus] = useState<TaskStatus>('ideas' as TaskStatus);
   const [editNotes, setEditNotes] = useState<string>('');
+  const { role, canDelete } = useUserRole();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchTasks();
@@ -359,11 +365,13 @@ export default function Projects() {
 
       {editingTask && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md m-4">
+          <Card className="w-full max-w-lg m-4">
             <CardHeader>
               <CardTitle>Atualizar Tarefa</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <TaskChat taskId={editingTask.id} taskTitle={editingTask.title} />
+              
               <Input disabled value={editingTask.title} />
               <select
                 className="w-full p-2 border rounded-md"
@@ -381,6 +389,19 @@ export default function Projects() {
               />
               <div className="flex gap-2">
                 <Button onClick={updateTask} className="flex-1">Salvar</Button>
+                {canDelete(editingTask.user_id || '', user?.id || '') && (
+                  <Button variant="destructive" onClick={async () => {
+                    if (!editingTask) return;
+                    const { error } = await supabase.from('tasks').delete().eq('id', editingTask.id);
+                    if (error) {
+                      toast({ title: 'Erro ao excluir tarefa', description: error.message, variant: 'destructive' });
+                    } else {
+                      toast({ title: 'Tarefa excluída!' });
+                      setEditingTask(null);
+                      fetchTasks();
+                    }
+                  }}>Excluir</Button>
+                )}
                 <Button variant="outline" onClick={() => setEditingTask(null)}>Cancelar</Button>
               </div>
             </CardContent>

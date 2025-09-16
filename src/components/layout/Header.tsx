@@ -9,16 +9,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Bell, Plus, User, Settings, HelpCircle, LogOut } from "lucide-react";
+import { Search, Plus, User, Settings, HelpCircle, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { CampaignModal } from "@/components/CampaignModal";
+import { NotificationCenter } from "@/components/NotificationCenter";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export function Header() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const { toast } = useToast();
 
   const handleSignOut = async () => {
     await signOut();
@@ -45,19 +50,72 @@ export function Header() {
     return user?.email?.split('@')[0] || 'Usuário';
   };
 
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchTerm.trim()) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Search campaigns
+      const { data: campaigns } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('user_id', user.id)
+        .ilike('name', `%${searchTerm}%`);
+
+      // Search personas
+      const { data: personas } = await supabase
+        .from('personas')
+        .select('*')
+        .eq('user_id', user.id)
+        .ilike('persona_name', `%${searchTerm}%`);
+
+      // Search tasks
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', user.id)
+        .ilike('title', `%${searchTerm}%`);
+
+      const results = [
+        ...(campaigns || []).map(c => ({ type: 'Campanha', name: c.name, id: c.id })),
+        ...(personas || []).map(p => ({ type: 'Persona', name: p.persona_name, id: p.id })),
+        ...(tasks || []).map(t => ({ type: 'Tarefa', name: t.title, id: t.id }))
+      ];
+
+      if (results.length > 0) {
+        toast({
+          title: `Encontrados ${results.length} resultados`,
+          description: results.slice(0, 3).map(r => `${r.type}: ${r.name}`).join(', '),
+        });
+      } else {
+        toast({
+          title: "Nenhum resultado encontrado",
+          description: `Não foram encontrados resultados para "${searchTerm}"`
+        });
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+    }
+  };
+
   return (
     <>
       <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="flex items-center justify-between px-6 h-full">
           {/* Search */}
           <div className="flex items-center gap-4 flex-1 max-w-md">
-            <div className="relative flex-1">
+            <form onSubmit={handleSearch} className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <Input 
                 placeholder="Pesquisar campanhas, personas, projetos..." 
                 className="pl-10 border-border/60 focus:border-primary"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
-            </div>
+            </form>
           </div>
 
           {/* Actions */}
@@ -72,10 +130,7 @@ export function Header() {
               Nova Campanha
             </Button>
 
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-destructive rounded-full"></span>
-            </Button>
+            <NotificationCenter onNotificationClick={() => {}} />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

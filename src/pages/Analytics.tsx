@@ -28,13 +28,14 @@ interface Campaign {
   status: string;
 }
 
-// Default channel data for visualization
-const channelData = [
-  { name: "Orgânico", value: 45, color: "#8884d8" },
-  { name: "PPC", value: 30, color: "#82ca9d" },
-  { name: "Social Media", value: 15, color: "#ffc658" },
-  { name: "Email", value: 10, color: "#ff7300" }
-];
+// Channel colors
+const channelColors: { [key: string]: string } = {
+  "organic": "#8884d8",
+  "ppc": "#82ca9d", 
+  "social": "#ffc658",
+  "email": "#ff7300",
+  "direct": "#8dd1e1"
+};
 
 export default function Analytics() {
   const [metrics, setMetrics] = useState<Metric[]>([]);
@@ -142,6 +143,35 @@ export default function Analytics() {
     }, {});
     
     return Object.values(monthlyData);
+  };
+
+  // Generate channel distribution from real data
+  const generateChannelData = () => {
+    const channelTotals = filteredMetrics.reduce((acc: any, metric) => {
+      if (metric.channel && ['traffic', 'visitors', 'unique_visitors'].includes(metric.metric_name)) {
+        const channelName = metric.channel.charAt(0).toUpperCase() + metric.channel.slice(1);
+        acc[channelName] = (acc[channelName] || 0) + Number(metric.metric_value || 0);
+      }
+      return acc;
+    }, {});
+
+    const total = Object.values(channelTotals).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+    
+    if (total === 0) {
+      // Fallback data when no real data exists
+      return [
+        { name: "Orgânico", value: 45, color: channelColors.organic },
+        { name: "PPC", value: 30, color: channelColors.ppc },
+        { name: "Social Media", value: 15, color: channelColors.social },
+        { name: "Email", value: 10, color: channelColors.email }
+      ];
+    }
+
+    return Object.entries(channelTotals).map(([name, value]) => ({
+      name,
+      value: Math.round((Number(value) / Number(total)) * 100),
+      color: channelColors[name.toLowerCase()] || "#8884d8"
+    }));
   };
 
   return (
@@ -267,7 +297,7 @@ export default function Analytics() {
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={channelData}
+                      data={generateChannelData()}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -276,7 +306,7 @@ export default function Analytics() {
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      {channelData.map((entry, index) => (
+                      {generateChannelData().map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
