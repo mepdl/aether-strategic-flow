@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-type UserRole = 'admin' | 'editor' | 'analyst' | 'viewer';
+type UserRole = 'admin' | 'editor' | 'analyst' | 'viewer' | 'gerente_marketing' | 'analista_marketing' | 'assistente_marketing';
 
 export function useUserRole() {
   const [role, setRole] = useState<UserRole | null>(null);
@@ -39,9 +39,12 @@ export function useUserRole() {
     if (!role) return false;
     
     const hierarchy = {
-      'admin': 3,
-      'editor': 2,
+      'admin': 4,
+      'gerente_marketing': 4,
+      'editor': 3,
+      'analista_marketing': 3,
       'analyst': 2,
+      'assistente_marketing': 2,
       'viewer': 1
     };
 
@@ -51,8 +54,8 @@ export function useUserRole() {
   const canDelete = (itemUserId: string, currentUserId: string): boolean => {
     if (!role) return false;
     
-    // Admin can delete anything
-    if (role === 'admin') return true;
+    // Admin and gerente_marketing can delete anything
+    if (role === 'admin' || role === 'gerente_marketing') return true;
     
     // Others can only delete their own items
     return itemUserId === currentUserId;

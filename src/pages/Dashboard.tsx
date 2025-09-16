@@ -1,511 +1,306 @@
-import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MetricCard } from "@/components/ui/metric-card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
+import { DashboardFilters } from "@/components/DashboardFilters";
+import { MetricCard } from "@/components/ui/metric-card";
 import { 
+  TrendingUp, 
+  TrendingDown, 
   Users, 
   Target, 
-  TrendingUp, 
-  Eye,
-  Calendar as CalendarIcon,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  FileText
+  DollarSign, 
+  Zap,
+  ArrowUpRight,
+  ArrowDownRight,
+  Calendar
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
-
-interface DashboardMetrics {
-  totalLeads: number;
-  conversionRate: number;
-  campaignROI: number;
-  websiteTraffic: number;
-}
-
-interface OKRData {
-  id: string;
-  title: string;
-  progress: number;
-  status: "on_track" | "at_risk" | "exceeded";
-  current: number;
-  target: number;
-  unit: string;
-}
-
-interface TaskData {
-  id: string;
-  title: string;
-  due_date: string;
-  priority: number;
-}
+import { useState, useEffect } from "react";
 
 export default function Dashboard() {
-  const [metrics, setMetrics] = useState<DashboardMetrics>({
-    totalLeads: 0,
-    conversionRate: 0,
-    campaignROI: 0,
-    websiteTraffic: 0
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [filteredData, setFilteredData] = useState({
+    startDate: '',
+    endDate: '',
+    campaignId: 'all'
   });
-  const [okrs, setOkrs] = useState<OKRData[]>([]);
-  const [upcomingTasks, setUpcomingTasks] = useState<TaskData[]>([]);
-  const [campaigns, setCampaigns] = useState<{ id: string; name: string; budget: number | null; spent: number | null; status: string | null; }[]>([]);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [startDate, setStartDate] = useState<Date>();
-  const [endDate, setEndDate] = useState<Date>();
-  const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchData();
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      // Fetch campaigns
+      const { data: campaignsData } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('user_id', user.id);
+      setCampaigns(campaignsData || []);
 
       // Fetch metrics
       const { data: metricsData } = await supabase
         .from('metrics')
         .select('*')
         .eq('user_id', user.id);
+      setMetrics(metricsData || []);
 
-      // Calculate metrics from data (fallback to 0, no fake numbers)
-      const leads = metricsData?.filter(m => m.metric_name === 'leads').reduce((sum, m: any) => sum + (m.metric_value || 0), 0) || 0;
-      const traffic = metricsData?.filter(m => m.metric_name === 'traffic').reduce((sum, m: any) => sum + (m.metric_value || 0), 0) || 0;
-      const conversions = metricsData?.filter(m => m.metric_name === 'conversions').reduce((sum, m: any) => sum + (m.metric_value || 0), 0) || 0;
-      const conversionRate = traffic > 0 ? Number(((conversions / traffic) * 100).toFixed(1)) : 0;
-
-      setMetrics({
-        totalLeads: leads,
-        conversionRate,
-        campaignROI: 0,
-        websiteTraffic: traffic
-      });
-
-      // Fetch OKRs with key results
-      const { data: objectives } = await supabase
-        .from('objectives')
-        .select(`
-          *,
-          key_results (*)
-        `)
-        .eq('user_id', user.id)
-        .limit(3);
-
-      if (objectives) {
-        const okrData = objectives.map(obj => {
-          const keyResults = obj.key_results || [];
-          const totalProgress = keyResults.reduce((sum: number, kr: any) => {
-            const progress = kr.target_value ? (kr.current_value / kr.target_value) * 100 : 0;
-            return sum + progress;
-          }, 0);
-          const avgProgress = keyResults.length > 0 ? totalProgress / keyResults.length : 0;
-          
-          let status: "on_track" | "at_risk" | "exceeded" = "on_track";
-          if (avgProgress < 60) status = "at_risk";
-          if (avgProgress > 100) status = "exceeded";
-
-          return {
-            id: obj.id,
-            title: obj.title,
-            progress: avgProgress,
-            status,
-            current: keyResults[0]?.current_value || 0,
-            target: keyResults[0]?.target_value || 100,
-            unit: keyResults[0]?.unit || "unidade"
-          };
-        });
-        setOkrs(okrData);
-      }
-
-      // Fetch upcoming tasks
-      const { data: tasks } = await supabase
+      // Fetch tasks
+      const { data: tasksData } = await supabase
         .from('tasks')
-        .select('id, title, due_date, priority')
+        .select('*')
         .eq('user_id', user.id)
-        .not('due_date', 'is', null)
-        .gte('due_date', new Date().toISOString().split('T')[0])
-        .order('due_date', { ascending: true })
-        .limit(4);
-
-      if (tasks) {
-        setUpcomingTasks(tasks);
-      }
-
-      // Fetch latest campaigns to display (no fake data)
-      const { data: campaignRows } = await supabase
-        .from('campaigns')
-        .select('id, name, budget, spent, status')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(3);
-      if (campaignRows) setCampaigns(campaignRows);
-
+        .order('due_date', { ascending: true });
+      setTasks(tasksData || []);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
   };
 
-  const generateExecutiveReport = async () => {
-    setIsGeneratingReport(true);
-    try {
-      // Generate HTML report
-      const reportHTML = `
-        <!DOCTYPE html>
-        <html lang="pt-BR">
+  // Calculate real metrics
+  const getMetricValue = (metricName: string) => {
+    return metrics
+      .filter(m => m.metric_name === metricName)
+      .reduce((sum, m) => sum + Number(m.metric_value || 0), 0);
+  };
+
+  const activeCampaigns = campaigns.filter(c => c.status === 'active').length;
+  const totalBudget = campaigns.reduce((sum, c) => sum + Number(c.budget || 0), 0);
+  const totalSpent = campaigns.reduce((sum, c) => sum + Number(c.spent || 0), 0);
+  const roi = totalSpent > 0 ? Math.round(((getMetricValue('revenue') - totalSpent) / totalSpent) * 100) : 0;
+
+  // Calculate period-over-period changes (mock for now since we don't have historical data)
+  const roiChange = 0; // Would calculate based on previous period data
+  const budgetChange = 0; // Would calculate based on previous period data
+  
+  const handleDateRangeChange = (startDate: string, endDate: string) => {
+    setFilteredData(prev => ({ ...prev, startDate, endDate }));
+    // Filter data based on date range
+    toast({ title: "Filtros aplicados", description: `Período: ${startDate} - ${endDate}` });
+  };
+
+  const handleCampaignChange = (campaignId: string) => {
+    setFilteredData(prev => ({ ...prev, campaignId }));
+  };
+
+  const generateExecutiveReport = () => {
+    const reportHTML = `
+      <!DOCTYPE html>
+      <html>
         <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Relatório Executivo - Marketing</title>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
           <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background: #f9f9f9; }
-            .container { max-width: 800px; margin: 0 auto; background: white; padding: 40px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
-            .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid #0066cc; padding-bottom: 20px; }
-            .header h1 { color: #0066cc; font-size: 2.5em; margin-bottom: 10px; }
-            .header p { color: #666; font-size: 1.1em; }
-            .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
-            .metric-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center; }
-            .metric-value { font-size: 2em; font-weight: bold; margin-bottom: 5px; }
-            .metric-label { font-size: 0.9em; opacity: 0.9; }
-            .section { margin-bottom: 40px; }
-            .section h2 { color: #0066cc; margin-bottom: 20px; font-size: 1.8em; }
-            .okr-item { background: #f8f9fa; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid #28a745; }
-            .progress-bar { background: #e9ecef; height: 10px; border-radius: 5px; margin-top: 10px; }
-            .progress-fill { background: linear-gradient(90deg, #28a745, #20c997); height: 100%; border-radius: 5px; transition: width 0.3s ease; }
-            @media (max-width: 768px) { 
-              .container { padding: 20px; }
-              .metrics-grid { grid-template-columns: 1fr; }
-              .header h1 { font-size: 2em; }
-            }
+            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; color: #333; }
+            .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+            .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }
+            .metric-card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; text-align: center; }
+            .metric-value { font-size: 2em; font-weight: bold; color: #2563eb; }
+            .metric-label { color: #666; margin-top: 5px; }
+            .campaigns-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            .campaigns-table th, .campaigns-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+            .campaigns-table th { background-color: #f5f5f5; }
+            .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; }
+            @media print { body { margin: 0; } }
           </style>
         </head>
         <body>
-          <div class="container">
-            <div class="header">
-              <h1>Relatório Executivo</h1>
-              <p>Período: ${startDate ? format(startDate, 'dd/MM/yyyy') : 'Início'} - ${endDate ? format(endDate, 'dd/MM/yyyy') : 'Fim'}</p>
-              <p>Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+          <div class="header">
+            <h1>Relatório Executivo de Marketing</h1>
+            <p>Gerado em: ${new Date().toLocaleDateString('pt-BR')}</p>
+          </div>
+          
+          <div class="metric-grid">
+            <div class="metric-card">
+              <div class="metric-value">${activeCampaigns}</div>
+              <div class="metric-label">Campanhas Ativas</div>
             </div>
-            
-            <div class="metrics-grid">
-              <div class="metric-card">
-                <div class="metric-value">${metrics.totalLeads.toLocaleString()}</div>
-                <div class="metric-label">Leads Gerados</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value">${metrics.conversionRate}%</div>
-                <div class="metric-label">Taxa de Conversão</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value">${metrics.campaignROI}%</div>
-                <div class="metric-label">ROI das Campanhas</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value">${metrics.websiteTraffic.toLocaleString()}</div>
-                <div class="metric-label">Tráfego do Site</div>
-              </div>
+            <div class="metric-card">
+              <div class="metric-value">R$ ${totalBudget.toLocaleString('pt-BR')}</div>
+              <div class="metric-label">Orçamento Total</div>
             </div>
-
-            <div class="section">
-              <h2>Progresso dos OKRs</h2>
-              ${okrs.map(okr => `
-                <div class="okr-item">
-                  <h3>${okr.title}</h3>
-                  <p>Status: ${getStatusText(okr.status)} | Progresso: ${Math.round(okr.progress)}%</p>
-                  <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${Math.min(okr.progress, 100)}%"></div>
-                  </div>
-                </div>
-              `).join('')}
+            <div class="metric-card">
+              <div class="metric-value">${roi}%</div>
+              <div class="metric-label">ROI</div>
             </div>
-
-            <div class="section">
-              <h2>Campanhas Ativas</h2>
-              ${campaigns.map(c => `
-                <div class="okr-item">
-                  <h3>${c.name}</h3>
-                  <p>Orçamento: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.budget || 0))}</p>
-                  <p>Gasto: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.spent || 0))}</p>
-                  <p>Status: ${c.status === 'active' ? 'Ativa' : (c.status === 'paused' ? 'Pausada' : 'Rascunho')}</p>
-                </div>
-              `).join('')}
+            <div class="metric-card">
+              <div class="metric-value">${getMetricValue('conversions')}</div>
+              <div class="metric-label">Conversões</div>
             </div>
           </div>
+
+          <h2>Campanhas Ativas</h2>
+          <table class="campaigns-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Status</th>
+                <th>Orçamento</th>
+                <th>Gasto</th>
+                <th>% Utilizado</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${campaigns.map(campaign => `
+                <tr>
+                  <td>${campaign.name}</td>
+                  <td>${campaign.status}</td>
+                  <td>R$ ${(campaign.budget || 0).toLocaleString('pt-BR')}</td>
+                  <td>R$ ${(campaign.spent || 0).toLocaleString('pt-BR')}</td>
+                  <td>${campaign.budget ? Math.round((campaign.spent || 0) / campaign.budget * 100) : 0}%</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <p>Relatório gerado automaticamente pelo FlowMint</p>
+          </div>
         </body>
-        </html>
-      `;
+      </html>
+    `;
 
-      // Create and download the file
-      const blob = new Blob([reportHTML], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `relatorio-executivo-${format(new Date(), 'yyyy-MM-dd')}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      toast({
-        title: "Relatório Executivo Gerado",
-        description: "O relatório foi baixado com sucesso.",
-      });
-    } catch (error) {
-      console.error('Error generating report:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao gerar relatório. Tente novamente.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingReport(false);
-    }
-  };
+    const blob = new Blob([reportHTML], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `relatorio-executivo-${new Date().toISOString().split('T')[0]}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "on_track":
-        return "text-success border-success";
-      case "at_risk":
-        return "text-warning border-warning";
-      case "exceeded":
-        return "text-primary border-primary";
-      default:
-        return "text-muted-foreground border-muted-foreground";
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "on_track":
-        return "No Prazo";
-      case "at_risk":
-        return "Em Risco";
-      case "exceeded":
-        return "Excedido";
-      default:
-        return "Pendente";
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return "Hoje";
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return "Amanhã";
-    } else {
-      return date.toLocaleDateString('pt-BR', { 
-        weekday: 'short', 
-        day: 'numeric',
-        month: 'short'
-      });
-    }
+    toast({ title: "Relatório baixado!", description: "O relatório executivo foi salvo em HTML." });
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
             Visão geral do desempenho das suas campanhas de marketing
           </p>
         </div>
-        <Button 
-          className="gradient-primary gap-2 w-fit"
-          onClick={generateExecutiveReport}
-          disabled={isGeneratingReport}
-        >
-          <FileText className="w-4 h-4" />
-          {isGeneratingReport ? "Gerando..." : "Relatório Executivo"}
-        </Button>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-4">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className={cn("justify-start text-left font-normal", !startDate && "text-muted-foreground")}>
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {startDate ? format(startDate, "dd/MM/yyyy") : "Data início"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
-            <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
-          </PopoverContent>
-        </Popover>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className={cn("justify-start text-left font-normal", !endDate && "text-muted-foreground")}>
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {endDate ? format(endDate, "dd/MM/yyyy") : "Data fim"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
-            <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
-          </PopoverContent>
-        </Popover>
-        <select 
-          className="px-3 py-2 border rounded-md"
-          value={selectedCampaign}
-          onChange={(e) => setSelectedCampaign(e.target.value)}
-        >
-          <option value="all">Todas as Campanhas</option>
-          {campaigns.map(campaign => (
-            <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
-          ))}
-        </select>
-      </div>
+      <DashboardFilters 
+        onDateRangeChange={handleDateRangeChange}
+        onCampaignChange={handleCampaignChange}
+        campaigns={campaigns}
+        onExportReport={generateExecutiveReport}
+      />
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard
-          title="Leads Gerados (Mês)"
-          value={metrics.totalLeads.toLocaleString()}
-          change="+12.5%"
-          trend="up"
-          icon={<Users className="w-5 h-5" />}
+          title="Campanhas Ativas"
+          value={activeCampaigns.toString()}
+          change={0}
+          trend={activeCampaigns > 0 ? "up" : "neutral"}
+          icon={<Zap className="h-4 w-4" />}
         />
         <MetricCard
-          title="Taxa de Conversão"
-          value={`${metrics.conversionRate}%`}
-          change="+0.8%"
-          trend="up"
-          icon={<Target className="w-5 h-5" />}
+          title="Orçamento Total"
+          value={`R$ ${totalBudget.toLocaleString('pt-BR')}`}
+          change={0}
+          trend="neutral"
+          icon={<DollarSign className="h-4 w-4" />}
         />
         <MetricCard
-          title="ROI das Campanhas"
-          value={`${metrics.campaignROI}%`}
-          change="+15.2%"
-          trend="up"
-          icon={<TrendingUp className="w-5 h-5" />}
+          title="ROI"
+          value={`${roi}%`}
+          change={0}
+          trend={roi > 0 ? "up" : "neutral"}
+          icon={<TrendingUp className="h-4 w-4" />}
         />
         <MetricCard
-          title="Tráfego do Site"
-          value={metrics.websiteTraffic.toLocaleString()}
-          change="-2.1%"
-          trend="down"
-          icon={<Eye className="w-5 h-5" />}
+          title="Conversões"
+          value={getMetricValue('conversions').toString()}
+          change={0}
+          trend={getMetricValue('conversions') > 0 ? "up" : "neutral"}
+          icon={<Target className="h-4 w-4" />}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        {/* OKRs Progress */}
-        <Card className="lg:col-span-2">
+      {/* Recent Campaigns and Tasks */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Campaigns */}
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="w-5 h-5" />
-              Progresso dos OKRs - Q4 2024
-            </CardTitle>
+            <CardTitle>Campanhas Recentes</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {okrs.length > 0 ? (
-              okrs.map((okr) => (
-                <div key={okr.id} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-sm md:text-base">{okr.title}</h4>
-                    <Badge variant="outline" className={getStatusColor(okr.status)}>
-                      {getStatusText(okr.status)}
+          <CardContent className="space-y-4">
+            {campaigns.slice(0, 5).map((campaign) => (
+              <div key={campaign.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <p className="font-medium">{campaign.name}</p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Badge variant={campaign.status === 'active' ? 'default' : 'secondary'}>
+                      {campaign.status}
                     </Badge>
-                  </div>
-                  <Progress value={Math.min(okr.progress, 100)} className="h-2" />
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>{okr.current} / {okr.target} {okr.unit}</span>
-                    <span>{Math.round(okr.progress)}% completo</span>
+                    <span>R$ {(campaign.spent || 0).toLocaleString('pt-BR')} / R$ {(campaign.budget || 0).toLocaleString('pt-BR')}</span>
                   </div>
                 </div>
-              ))
-            ) : (
+                <Progress 
+                  value={campaign.budget ? (campaign.spent || 0) / campaign.budget * 100 : 0} 
+                  className="w-24" 
+                />
+              </div>
+            ))}
+            {campaigns.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                <Target className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhum OKR encontrado</p>
-                <p className="text-sm">Acesse a página Estratégia para criar seus objetivos</p>
+                <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhuma campanha encontrada</p>
+                <p className="text-sm">Crie sua primeira campanha para começar.</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Upcoming Tasks */}
+        {/* Próximas Tarefas */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
+              <Calendar className="h-5 w-5" />
               Próximas Tarefas
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {upcomingTasks.length > 0 ? (
-              upcomingTasks.map((task) => (
-                <div key={task.id} className="flex items-start gap-3">
-                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                    task.priority === 1 ? 'bg-destructive' :
-                    task.priority === 2 ? 'bg-warning' : 'bg-primary'
-                  }`}></div>
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{task.title}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {formatDate(task.due_date)}
-                    </p>
-                  </div>
+            {tasks.slice(0, 5).map((task) => (
+              <div key={task.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <p className="font-medium">{task.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {task.due_date ? new Date(task.due_date).toLocaleDateString('pt-BR') : 'Sem prazo'}
+                  </p>
                 </div>
-              ))
-            ) : (
+                <Badge variant="outline">
+                  {task.status}
+                </Badge>
+              </div>
+            ))}
+            {tasks.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p className="text-sm">Nenhuma tarefa próxima</p>
+                <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhuma tarefa encontrada</p>
+                <p className="text-sm">Crie tarefas para organizar seu trabalho.</p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Active Campaigns */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Campanhas Ativas</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {campaigns.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>Nenhuma campanha encontrada</p>
-              <p className="text-sm">Crie campanhas na página Campanhas</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {campaigns.map((c) => (
-                <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-lg gap-4">
-                  <div className="min-w-0">
-                    <h4 className="font-semibold truncate">{c.name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Orçamento: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.budget || 0))}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">Gasto: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.spent || 0))}</p>
-                    <p className="text-xs text-muted-foreground">Status: {c.status === 'active' ? 'Ativa' : (c.status === 'paused' ? 'Pausada' : 'Rascunho')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

@@ -23,6 +23,7 @@ import {
   Edit
 } from "lucide-react";
 import { CampaignModal } from "@/components/CampaignModal";
+import { PerformanceChart } from "@/components/PerformanceChart";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -411,19 +412,7 @@ export default function Campaigns() {
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Análise de Desempenho</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <BarChart3 className="w-12 h-12 mx-auto mb-4" />
-                  <p>Gráficos de desempenho em desenvolvimento</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <PerformanceChart />
         </TabsContent>
 
         <TabsContent value="planning" className="space-y-6">

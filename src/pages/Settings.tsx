@@ -6,7 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { User, Bell, Shield, Trash2, Database, Palette, Globe } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { User, Bell, Shield, Trash2, Database, Palette, Globe, Users, Plus, Mail, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -24,6 +25,12 @@ export default function Settings() {
     bio: "",
     dateFormat: "DD/MM/YYYY"
   });
+  const [groups, setGroups] = useState<any[]>([]);
+  const [newGroup, setNewGroup] = useState({ name: "", description: "" });
+  const [newMember, setNewMember] = useState({ email: "", role: "viewer" });
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<any>(null);
   const [notifications, setNotifications] = useState({
     emailNotifications: true,
     weeklyReports: false,
@@ -32,21 +39,55 @@ export default function Settings() {
   });
   const { toast } = useToast();
 
-  // Appearance helpers
+  // Load initial data
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'system';
     const savedDensity = localStorage.getItem('density') || 'comfortable';
     const savedTimezone = localStorage.getItem('timezone') || timezone;
     const savedDateFormat = localStorage.getItem('dateFormat') || preferences.dateFormat;
 
+    // Load saved profile data
+    const savedName = localStorage.getItem('profile:name') || '';
+    const savedEmail = localStorage.getItem('profile:email') || '';
+    const savedJobTitle = localStorage.getItem('profile:jobTitle') || '';
+    const savedCompany = localStorage.getItem('profile:company') || '';
+    const savedBio = localStorage.getItem('profile:bio') || '';
+
     setTheme(savedTheme);
     setDensity(savedDensity);
     setTimezone(savedTimezone);
-    setPreferences((prev) => ({ ...prev, dateFormat: savedDateFormat }));
+    setPreferences({
+      name: savedName,
+      email: savedEmail,
+      jobTitle: savedJobTitle,
+      company: savedCompany,
+      bio: savedBio,
+      dateFormat: savedDateFormat
+    });
 
     applyTheme(savedTheme);
     applyDensity(savedDensity);
+    fetchGroups();
   }, []);
+
+  const fetchGroups = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('groups')
+        .select(`
+          *,
+          group_memberships(email, role, status)
+        `)
+        .or(`created_by.eq.${user.id},group_memberships.user_id.eq.${user.id}`);
+      
+      setGroups(data || []);
+    } catch (error) {
+      console.error('Error fetching groups:', error);
+    }
+  };
 
   const applyTheme = (newTheme: string) => {
     const root = document.documentElement;
@@ -134,6 +175,62 @@ export default function Settings() {
     }
   };
 
+  const createGroup = async () => {
+    if (!newGroup.name) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('groups')
+        .insert([{
+          name: newGroup.name,
+          description: newGroup.description,
+          created_by: user.id
+        }]);
+
+      if (error) throw error;
+
+      toast({ title: 'Grupo criado com sucesso!' });
+      setShowGroupModal(false);
+      setNewGroup({ name: "", description: "" });
+      fetchGroups();
+    } catch (error) {
+      console.error('Error creating group:', error);
+      toast({ title: 'Erro ao criar grupo', variant: 'destructive' });
+    }
+  };
+
+  const inviteMember = async () => {
+    if (!newMember.email || !selectedGroup) return;
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('group_memberships')
+        .insert([{
+          group_id: selectedGroup.id,
+          user_id: newMember.email, // Will be updated when user signs up
+          email: newMember.email,
+          role: newMember.role as any,
+          invited_by: user.id
+        }]);
+
+      if (error) throw error;
+
+      toast({ title: 'Convite enviado!' });
+      setShowMemberModal(false);
+      setNewMember({ email: "", role: "viewer" });
+      fetchGroups();
+    } catch (error) {
+      console.error('Error inviting member:', error);
+      toast({ title: 'Erro ao convidar membro', variant: 'destructive' });
+    }
+  };
+
   const resetAllData = async () => {
     setIsResetting(true);
     try {
@@ -147,6 +244,8 @@ export default function Settings() {
 
       // Reset all user data in the correct order (children -> parents)
       const tables = [
+        'group_memberships',
+        'groups',
         'metrics',
         'tasks',
         'content',
@@ -187,10 +286,14 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="profile" className="flex items-center gap-2">
             <User className="h-4 w-4" />
             Perfil
+          </TabsTrigger>
+          <TabsTrigger value="team" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Equipe
           </TabsTrigger>
           <TabsTrigger value="notifications" className="flex items-center gap-2">
             <Bell className="h-4 w-4" />
@@ -303,6 +406,133 @@ export default function Settings() {
                 <Button className="w-full md:w-auto" onClick={saveWorkPreferences} disabled={isSaving}>
                   {isSaving ? 'Salvando...' : 'Salvar Alterações'}
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="team" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Gestão de Equipe</CardTitle>
+              <CardDescription>Gerencie grupos e membros da equipe (apenas para Gerente de Marketing)</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-medium">Grupos</h3>
+                <Dialog open={showGroupModal} onOpenChange={setShowGroupModal}>
+                  <DialogTrigger asChild>
+                    <Button className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      Criar Grupo
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Criar Novo Grupo</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Nome do Grupo</label>
+                        <Input
+                          placeholder="Nome do grupo"
+                          value={newGroup.name}
+                          onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Descrição</label>
+                        <Textarea
+                          placeholder="Descrição do grupo"
+                          value={newGroup.description}
+                          onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
+                        />
+                      </div>
+                      <Button onClick={createGroup} className="w-full">Criar Grupo</Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+              
+              <div className="space-y-3">
+                {groups.map((group) => (
+                  <div key={group.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-medium">{group.name}</h4>
+                        <p className="text-sm text-muted-foreground">{group.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {group.group_memberships?.length || 0} membros
+                        </p>
+                      </div>
+                      <Dialog open={showMemberModal} onOpenChange={setShowMemberModal}>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setSelectedGroup(group)}
+                          >
+                            <UserPlus className="h-4 w-4 mr-1" />
+                            Convidar
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Convidar Membro</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Email</label>
+                              <Input
+                                type="email"
+                                placeholder="email@exemplo.com"
+                                value={newMember.email}
+                                onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Função</label>
+                              <select
+                                className="w-full p-2 border rounded-md"
+                                value={newMember.role}
+                                onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
+                              >
+                                <option value="gerente_marketing">Gerente de Marketing</option>
+                                <option value="analista_marketing">Analista de Marketing</option>
+                                <option value="assistente_marketing">Assistente de Marketing</option>
+                              </select>
+                            </div>
+                            <Button onClick={inviteMember} className="w-full">Enviar Convite</Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                    
+                    <div className="mt-3 space-y-2">
+                      {group.group_memberships?.map((member: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm">
+                          <Mail className="h-3 w-3" />
+                          <span>{member.email}</span>
+                          <Badge variant="secondary" className="text-xs">{member.role}</Badge>
+                          <Badge 
+                            variant={member.status === 'active' ? 'default' : 'outline'} 
+                            className="text-xs"
+                          >
+                            {member.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                
+                {groups.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Nenhum grupo criado ainda.</p>
+                    <p className="text-sm">Crie seu primeiro grupo para começar a colaborar.</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

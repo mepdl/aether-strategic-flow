@@ -283,29 +283,67 @@ export default function Calendar() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Próximos Conteúdos</CardTitle>
+              <CardTitle>Próximas Tarefas</CardTitle>
+              <CardDescription>Visualização de tarefas organizadas por mês</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {content.slice(0, 5).map(item => {
-                const Icon = formatIcons[item.format as keyof typeof formatIcons];
-                return (
-                  <div key={item.id} className="flex items-center gap-3 p-2 border rounded">
-                    <Icon className="h-4 w-4" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(item.publish_date), "dd/MM", { locale: ptBR })}
-                      </p>
-                    </div>
-                    <Badge 
-                      variant="secondary" 
-                      className={`text-white ${statusColors[item.status as keyof typeof statusColors]}`}
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">{format(currentDate, "MMMM yyyy", { locale: ptBR })}</h4>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
                     >
-                      {item.status}
-                    </Badge>
+                      ←
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setCurrentDate(new Date())}
+                    >
+                      Hoje
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
+                    >
+                      →
+                    </Button>
                   </div>
-                );
-              })}
+                </div>
+                
+                <div className="grid grid-cols-7 gap-1 text-center">
+                  {["Do", "Se", "Te", "Qu", "Qu", "Se", "Sá"].map(day => (
+                    <div key={day} className="p-2 text-xs font-medium text-muted-foreground">
+                      {day}
+                    </div>
+                  ))}
+                  {getDaysInMonth().map(date => (
+                    <div 
+                      key={date.toISOString()} 
+                      className={`
+                        p-2 text-sm border rounded aspect-square flex flex-col items-center justify-center
+                        ${!isSameMonth(date, currentDate) ? 'bg-muted/30 text-muted-foreground' : 'bg-background'}
+                        ${isToday(date) ? 'ring-2 ring-primary bg-primary/10' : ''}
+                      `}
+                    >
+                      <span className={isToday(date) ? 'font-bold text-primary' : ''}>
+                        {format(date, "d")}
+                      </span>
+                      {getContentForDate(date).map(item => (
+                        <div 
+                          key={item.id}
+                          className="w-2 h-2 bg-primary rounded-full mt-1"
+                          title={item.title}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>

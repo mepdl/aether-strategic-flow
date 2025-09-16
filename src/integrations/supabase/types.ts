@@ -256,6 +256,77 @@ export type Database = {
           },
         ]
       }
+      group_memberships: {
+        Row: {
+          created_at: string
+          email: string
+          group_id: string
+          id: string
+          invited_by: string
+          role: Database["public"]["Enums"]["app_role"]
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          group_id: string
+          id?: string
+          invited_by: string
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          group_id?: string
+          id?: string
+          invited_by?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_memberships_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       key_results: {
         Row: {
           created_at: string
@@ -403,6 +474,38 @@ export type Database = {
           year?: number | null
         }
         Relationships: []
+      }
+      persona_team_members: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          persona_id: string
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          persona_id: string
+          role: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          persona_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "persona_team_members_persona_id_fkey"
+            columns: ["persona_id"]
+            isOneToOne: false
+            referencedRelation: "personas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       personas: {
         Row: {
@@ -647,7 +750,14 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "editor" | "analyst" | "viewer"
+      app_role:
+        | "admin"
+        | "editor"
+        | "analyst"
+        | "viewer"
+        | "gerente_marketing"
+        | "analista_marketing"
+        | "assistente_marketing"
       content_format:
         | "blog_post"
         | "social_media"
@@ -797,7 +907,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "editor", "analyst", "viewer"],
+      app_role: [
+        "admin",
+        "editor",
+        "analyst",
+        "viewer",
+        "gerente_marketing",
+        "analista_marketing",
+        "assistente_marketing",
+      ],
       content_format: [
         "blog_post",
         "social_media",

@@ -38,6 +38,8 @@ export default function Personas() {
   const [location, setLocation] = useState("");
   const [goals, setGoals] = useState("");
   const [painPoints, setPainPoints] = useState("");
+  const [teamEmail, setTeamEmail] = useState("");
+  const [teamRole, setTeamRole] = useState("");
 
   useEffect(() => {
     fetchPersonas();
@@ -49,9 +51,11 @@ export default function Personas() {
       setRole(editing.role || "");
       setAge(editing.demographics?.age ? String(editing.demographics.age) : "");
       setLocation(editing.demographics?.location || "");
-      setGoals(editing.goals || "");
-      setPainPoints(editing.pain_points || "");
-      setIsDialogOpen(true);
+    setGoals(editing.goals || "");
+    setPainPoints(editing.pain_points || "");
+    setTeamEmail("");
+    setTeamRole("");
+    setIsDialogOpen(true);
     }
   }, [editing]);
 
@@ -87,6 +91,8 @@ export default function Personas() {
     setLocation("");
     setGoals("");
     setPainPoints("");
+    setTeamEmail("");
+    setTeamRole("");
     setEditing(null);
   };
 
@@ -118,13 +124,35 @@ export default function Personas() {
       } as any;
 
       if (editing) {
-        const { error } = await supabase.from("personas").update(payload).eq("id", editing.id).eq("user_id", user.id);
-        if (error) throw error;
-        toast({ title: "Persona atualizada", description: "As alterações foram salvas." });
+      const { error } = await supabase.from("personas").update(payload).eq("id", editing.id).eq("user_id", user.id);
+      if (error) throw error;
+      
+      // Add team member if provided
+      if (teamEmail && teamRole) {
+        const { error: teamError } = await supabase.from("persona_team_members").insert({
+          persona_id: editing.id,
+          email: teamEmail,
+          role: teamRole
+        });
+        if (teamError) console.error("Team member error:", teamError);
+      }
+      
+      toast({ title: "Persona atualizada", description: "As alterações foram salvas." });
       } else {
-        const { error } = await supabase.from("personas").insert([payload]);
-        if (error) throw error;
-        toast({ title: "Persona criada", description: "Nova persona adicionada com sucesso." });
+      const { data: newPersona, error } = await supabase.from("personas").insert([payload]).select().single();
+      if (error) throw error;
+      
+      // Add team member if provided
+      if (teamEmail && teamRole && newPersona) {
+        const { error: teamError } = await supabase.from("persona_team_members").insert({
+          persona_id: newPersona.id,
+          email: teamEmail,
+          role: teamRole
+        });
+        if (teamError) console.error("Team member error:", teamError);
+      }
+      
+      toast({ title: "Persona criada", description: "Nova persona adicionada com sucesso." });
       }
 
       setIsDialogOpen(false);
@@ -198,6 +226,23 @@ export default function Personas() {
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="painPoints">Pontos de Dor (um por linha)</Label>
                 <Textarea id="painPoints" value={painPoints} onChange={(e) => setPainPoints(e.target.value)} placeholder={"Falta de tempo\nDificuldade em medir resultados"} rows={3} />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="teamEmail">Email do Participante</Label>
+                <Input id="teamEmail" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} placeholder="email@exemplo.com" />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="teamRole">Função do Participante</Label>
+                <select 
+                  className="w-full p-2 border rounded-md"
+                  value={teamRole}
+                  onChange={(e) => setTeamRole(e.target.value)}
+                >
+                  <option value="">Selecione uma função</option>
+                  <option value="gerente_marketing">Gerente de Marketing</option>
+                  <option value="analista_marketing">Analista de Marketing</option>
+                  <option value="assistente_marketing">Assistente de Marketing</option>
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-2">
